@@ -1,0 +1,9 @@
+[project]
+name = "fret-and-field"
+version = "0.1.0"
+description = "A Flask guitar practice room with microphone recording and monophonic transcription"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.1,<4",
+    "numpy>=2.0,<3",
+]

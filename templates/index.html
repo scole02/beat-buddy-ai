@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5f0">
+  <meta name="description" content="Record a guitar melody and see the notes you played on a musical staff.">
+  <title>Fret & Field — Your practice, on paper</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <header class="site-header"><a class="brand" href="/" aria-label="Fret and Field home"><span class="brand-icon">ƒ</span>fret <i>&</i> field<span class="beta">EARLY ACCESS</span></a><span class="header-note"><span class="small-dot"></span>A little practice, every day.</span></header>
+  <main>
+    <section class="intro"><div class="eyebrow">THE PRACTICE ROOM <span> / </span> 01</div><h1>Hear it. Play it. <em>See it.</em></h1><p>Turn a few notes on your guitar into something you can read.</p></section>
+    <div class="workspace">
+      <section class="recorder panel" aria-labelledby="record-title">
+        <div class="section-heading"><span class="step">01</span><h2 id="record-title">Capture a melody</h2><span class="live-tag" id="state-tag">READY</span></div>
+        <div class="audio-settings">
+          <div><label for="audio-device">Audio input</label><select id="audio-device"><option value="">System default</option></select><label class="output-label" for="audio-output">Headphone output</label><select id="audio-output"><option value="">System default output</option></select></div>
+          <div><label for="audio-channel">Record channel</label><select id="audio-channel"><option value="0">Input 1 / mono · Solo guitar</option><option value="1">Input 2 · Solo microphone</option></select></div>
+          <button id="refresh-inputs" type="button">Find inputs</button>
+          <p id="device-info">Connect your Scarlett by USB, then find inputs. For Solo 4th Gen guitar: use input 1 and enable INST. Keep the gain below clipping.</p>
+        </div>
+        <section class="metronome-settings" aria-label="Metronome">
+          <div class="metronome-top"><h3>Keep the beat</h3><span id="beat-display" aria-live="off">Ready · 4-beat count-in</span></div>
+          <div class="metronome-controls">
+            <label>Tempo <span class="tempo-field"><input id="tempo" type="number" min="40" max="240" step="1" value="100" inputmode="numeric"> BPM</span></label>
+            <button id="metronome-play" type="button" aria-pressed="false">▶ Play metronome</button>
+            <label>Click volume <input id="click-volume" type="range" min="0" max="100" value="35"></label>
+          </div>
+          <div class="meter-controls"><label>Beats per measure <input id="meter-numerator" type="number" min="1" max="12" step="1" value="4"></label><label>One beat is a <select id="meter-denominator"><option value="2">Half note (2)</option><option value="4" selected>Quarter note (4)</option><option value="8">Eighth note (8)</option><option value="16">Sixteenth note (16)</option></select></label></div>
+          <label class="timing-setting" for="timing-tolerance">Timing tolerance <output id="tolerance-value">0%</output><input id="timing-tolerance" type="range" min="0" max="15" step="1" value="0"></label>
+          <p id="tolerance-hint">0% adds no extra allowance; note lengths still round to the nearest sixteenth.</p>
+          <p>BPM counts the selected beat note. The first beat of each measure is accented.</p>
+          <div class="beat-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <label class="click-option"><input id="record-click" type="checkbox" checked> Keep metronome playing during recording</label>
+          <p id="output-hint">Use headphones to keep the click out of your recording. Choose headphones or Scarlett as your system output, or use Find inputs to list available outputs.</p>
+          <p>Record starts with 4 count-in beats. Start playing on the next beat; the count-in is excluded from your take.</p>
+        </section>
+        <div class="recording-surface" id="recording-surface">
+          <div class="mic-label"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11v2a6 6 0 0 0 12 0v-2M12 19v3M9 22h6"/></svg><span id="mic-label">Laptop microphone</span></div>
+          <div class="wave-container"><canvas id="waveform" aria-label="Live microphone waveform"></canvas><div class="wave-baseline"></div></div>
+          <div class="timer" id="timer">00:00<span>.0</span></div>
+          <p id="record-hint">Your next melody starts here.</p>
+          <button class="record-button" id="record-button"><span class="record-icon"></span><span id="record-label">Start recording</span></button>
+          <span class="limit">Up to 60 seconds per take</span>
+        </div>
+        <div class="input-row"><span>INPUT LEVEL</span><div class="meter" id="meter" aria-label="Microphone input level"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span id="input-state">Standby</span></div>
+        <div class="playback" id="playback" hidden><span>YOUR RECORDING</span><audio id="audio-playback" controls></audio></div>
+        <div class="status" id="status" role="status" aria-live="polite">Microphone access is requested when you record.</div>
+      </section>
+      <aside class="practice-notes">
+        <div class="note-symbol" aria-hidden="true">♩</div><div class="eyebrow">MAKE ROOM FOR THE MUSIC</div><h2>One note.<br> Then the next.</h2><p>Start small. Pick a simple melody and play it slowly, one string at a time.</p>
+        <ol><li><span>01</span>Find a quiet spot.</li><li><span>02</span>Keep your guitar close to your laptop.</li><li><span>03</span>Let each note ring before the next.</li></ol>
+        <div class="demo-box"><span>Just looking around?</span><button id="demo-button">Try a demo melody <span aria-hidden="true">↗</span></button></div>
+      </aside>
+      <section class="score panel" aria-labelledby="score-title">
+        <div class="section-heading"><span class="step">02</span><h2 id="score-title">Your melody, written down</h2><span class="score-tag" id="note-count">NO NOTES YET</span></div>
+        <div class="score-meta"><span id="score-subtitle">A fresh page for your next idea.</span><div class="clef-toggle" role="group" aria-label="Staff clef"><button id="bass-clef" type="button" aria-pressed="true">Bass clef</button><button id="treble-clef" type="button" aria-pressed="false">Treble clef</button></div></div>
+        <div id="score-empty" class="score-empty"><div class="empty-staff" aria-hidden="true"><span id="empty-clef">𝄢</span><i></i><i></i><i></i><i></i><i></i></div><div class="empty-caption"><span class="little-note">♪</span><h3>A little silence before the music.</h3><p>Record a melody above. The notes you play will appear here.</p></div></div>
+        <div id="score-result" hidden><div class="score-scroll" tabindex="0" aria-label="Musical score, three measures per row"><svg id="staff" role="img" aria-label="Transcribed guitar notes"></svg></div><div id="note-list" class="note-list" aria-label="Detected notes"></div></div>
+        <div class="score-footer"><span><span class="small-dot"></span><span id="score-footer-text">Listening comes first. The notation follows.</span></span><span id="rhythm-caption">Note values estimated from the recording tempo</span></div>
+      </section>
+    </div>
+    <footer><span>Made for the moments between “almost” and “got it.”</span><span>Single-note melodies <span class="dot-divider">·</span> A4 = 440 Hz <span class="dot-divider">·</span> C2–E6</span></footer>
+  </main>
+</body>
+</html>
