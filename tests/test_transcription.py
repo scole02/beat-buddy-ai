@@ -17,7 +17,7 @@ def tone(midi, duration=0.5, rate=22050, amplitude=0.25):
 class TranscriptionTests(unittest.TestCase):
     def test_guitar_range_and_browser_sample_rates(self):
         for rate in (8000, 22050, 44100, 48000, 96000):
-            for midi in (36, 38, 40, 45, 50, 55, 59, 64, 69, 76, 88):
+            for midi in (28, 36, 38, 40, 45, 50, 55, 59, 64, 69, 76, 88):
                 with self.subTest(rate=rate, midi=midi):
                     result = transcribe(tone(midi, rate=rate), rate)
                     self.assertEqual([n['midi'] for n in result['notes']], [midi])
@@ -52,8 +52,8 @@ class TranscriptionTests(unittest.TestCase):
         audio += np.random.default_rng(9).normal(0, .01, len(audio))
         self.assertEqual([n['midi'] for n in transcribe(audio, 22050)['notes']], [57])
 
-    def test_c_major_scale_from_c2(self):
-        expected = [36, 38, 40, 41, 43, 45, 47, 48]
+    def test_e_minor_scale_from_e1(self):
+        expected = [28, 30, 31, 33, 35, 36, 38, 40]
         for rate in (22050, 48000):
             for gap in (0, .12):
                 with self.subTest(rate=rate, gap=gap):
@@ -61,7 +61,7 @@ class TranscriptionTests(unittest.TestCase):
                         np.zeros(round(rate * gap))]) for m in expected])
                     notes = transcribe(audio, rate)['notes']
                     self.assertEqual([n['midi'] for n in notes], expected)
-                    self.assertEqual([n['label'] for n in notes[:2]], ['C2', 'D2'])
+                    self.assertEqual([n['label'] for n in notes[:2]], ['E1', 'F#1'])
 
     def test_clipping_warning(self):
         audio = np.clip(tone(64, amplitude=1.5), -1, 1)

@@ -61,11 +61,11 @@ class RhythmTests(unittest.TestCase):
 
     def test_tolerance_api(self):
         with app.test_client() as client:
-            data = {'notes':[{'start':0,'duration':.52}], 'tempo':100, 'tolerance':15}
+            data = {'notes':[{'start':0,'duration':.52}], 'tempo':100, 'tolerance':25}
             response = client.post('/api/rhythm', json=data)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json['notes'][0]['duration_beats'], 1)
-            for tolerance in (-1,16,'bad'):
+            for tolerance in (-1,26,'bad'):
                 self.assertEqual(client.post('/api/rhythm',json={**data,'tolerance':tolerance}).status_code,400)
             self.assertEqual(client.post('/api/rhythm',json={**data,'notes':[{'start':0,'duration':-1}]}).status_code,400)
 

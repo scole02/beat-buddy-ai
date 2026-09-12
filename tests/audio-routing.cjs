@@ -2,7 +2,7 @@
 const {readFileSync} = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
-async function check(channel, availableChannels, reject = false) {
+async function check(channel, availableChannels, reject = false, captureClick = false) {
   const nodes = new Map(), connections = [], requests = [], worklets = [];
   let stopped = false;
   function element(id) {
@@ -29,6 +29,7 @@ async function check(channel, availableChannels, reject = false) {
   vm.runInContext(readFileSync('static/app.js','utf8'),sandbox);
   await new Promise(resolve=>setImmediate(resolve));
   element('audio-device').value='scarlett-usb';
+  element('capture-click').checked=captureClick;
   await vm.runInContext('startRecording()',sandbox);
   assert.equal(requests[0].audio.deviceId.exact,'scarlett-usb');
   assert.equal(requests[0].audio.echoCancellation,false);
@@ -38,9 +39,17 @@ async function check(channel, availableChannels, reject = false) {
     if(!reject)assert.ok(stopped);
   } else {
     assert.equal(vm.runInContext('mode',sandbox),'countin');
-    assert.deepEqual(connections,['source-to-splitter',channel,channel,'pcm-recorder-output','metronome-output']);
+    assert.deepEqual(connections,['source-to-splitter',channel,channel,'pcm-recorder-output','metronome-output', ...(captureClick ? ['metronome-output'] : [])]);
     const recorder=worklets.find(w=>w.name==='pcm-recorder');
     assert.equal(recorder.options.processorOptions.startTime,12.55);
+    assert.equal(recorder.options.numberOfInputs, captureClick ? 2 : 1);
+    assert.equal(recorder.options.processorOptions.includeClick, captureClick);
+    if (captureClick) {
+      const click = worklets.find(w=>w.name==='metronome');
+      assert.equal(click.options.processorOptions.beatLimit, 0);
+      recorder.port.onmessage({data:{type:'mix',samples:new Float32Array([.1])}});
+      assert.equal(vm.runInContext('mixedChunks.length',sandbox),1);
+    }
     vm.runInContext('context.currentTime = recordingStartTime',sandbox);
     recorder.port.onmessage({data:{type:'started'}});
     assert.equal(vm.runInContext('mode',sandbox),'recording');
@@ -54,5 +63,6 @@ async function check(channel, availableChannels, reject = false) {
   await check(0,1); // Laptop microphone still works.
   await check(1,1); // Missing second channel must not yield a silent take.
   await check(0,2,true); // Disconnected USB source must not fall back to microphone.
-  console.log('5 audio routing cases passed');
+  await check(0,2,false,true); // Embedded click forces continuous metronome and separate capture input.
+  console.log('6 audio routing cases passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

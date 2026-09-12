@@ -1,19 +1,25 @@
 const $ = (id) => document.getElementById(id);
 let mode = 'idle', stream, context, source, worklet, analyser, splitter;
 let chunks = [], frameId, timeoutId, startedAt, recordingRate, playbackURL;
+let mixedChunks = [], captureClick = false;
 let stopAcknowledged;
 let toleranceRequest, toleranceTimer, toleranceRevision = 0;
-let recordingMeter = {numerator: 4, denominator: 4}, scoreLayout = null;
-let previewContext, previewClick, recordingClick, metroStarting = false;
+let recordingMeter = {numerator: 4, denominator: 4};
+let previewContext, previewClick, recordingClick, playbackContext, playbackClick, metroStarting = false;
 let recordingStartTime = 0, recordingTempo = 100, recorderStopped = false;
 let selectedClef = 'bass', latestScore = null;
-let playbackFrame, scoreDuration = 0;
-const SCORE_PIXELS_PER_SECOND = 100;
+let playbackFrame, scoreDuration = 0, scoreView;
 const MAX_SECONDS = 60;
 
 function status(message, error = false) {
   $('status').textContent = message;
   $('status').classList.toggle('error', error);
+}
+function preserveViewport(position = {left: window.scrollX, top: window.scrollY}) {
+  // Score teardown/rendering can trigger browser scroll anchoring. Restore only
+  // across the next two layout frames, not later while the user is navigating.
+  const restore = () => window.scrollTo(position.left, position.top);
+  requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
 }
 function setMode(next) {
   mode = next;
@@ -77,6 +83,35 @@ async function cleanup() {
   [...$('meter').children].forEach(bar => bar.classList.remove('on'));
   $('input-state').textContent = 'Standby'; drawWave();
 }
+async function stopPlaybackMetronome() {
+  playbackClick?.port.postMessage('stop'); playbackClick?.disconnect(); playbackClick = undefined;
+  const oldContext = playbackContext; playbackContext = undefined;
+  if (oldContext && oldContext.state !== 'closed') await oldContext.close().catch(() => {});
+  resetBeatDisplay();
+}
+async function startPlaybackMetronome() {
+  const audio = $('audio-playback'), result = latestScore?.result;
+  if (!$('playback-click').checked || audio.paused || audio.seeking || audio.readyState < 3 || !result?.tempo || playbackContext) return;
+  let newContext;
+  try {
+    newContext = playbackContext = new AudioContext({sampleRate: 48000});
+    await routeClickOutput(newContext);
+    await newContext.resume();
+    await newContext.audioWorklet.addModule('/static/metronome-worklet.js');
+    if (playbackContext !== newContext) return;
+    if (audio.paused || audio.seeking || audio.readyState < 3 || !$('playback-click').checked) {
+      await stopPlaybackMetronome(); return;
+    }
+    // Anchor beats to the recording's zero point so resumed and sought playback stays in time.
+    playbackClick = createClickTrack(newContext, result.tempo * audio.playbackRate,
+      newContext.currentTime - audio.currentTime / audio.playbackRate, 0, result.time_signature || {numerator: 4, denominator: 4});
+  } catch (error) {
+    // A cancelled initialization must never stop a newer playback session.
+    if (playbackContext !== newContext) return;
+    await stopPlaybackMetronome();
+    status(error.message || 'Could not start the playback metronome.', true);
+  }
+}
 async function startRecording() {
   setMode('starting');
   $('audio-playback').pause();
@@ -105,12 +140,13 @@ async function startRecording() {
     await context.audioWorklet.addModule('/static/recorder-worklet.js');
     await context.audioWorklet.addModule('/static/metronome-worklet.js');
     recordingRate = context.sampleRate;
-    chunks = []; recorderStopped = false;
+    chunks = []; mixedChunks = []; recorderStopped = false;
+    captureClick = $('capture-click').checked;
     const countInStart = context.currentTime + .15;
     recordingStartTime = countInStart + 4 * 60 / recordingTempo;
     source = context.createMediaStreamSource(stream);
     analyser = context.createAnalyser(); analyser.fftSize = 2048;
-    worklet = new AudioWorkletNode(context, 'pcm-recorder', {numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit', processorOptions: {startTime: recordingStartTime, maxDuration: MAX_SECONDS}});
+    worklet = new AudioWorkletNode(context, 'pcm-recorder', {numberOfInputs: captureClick ? 2 : 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit', processorOptions: {startTime: recordingStartTime, maxDuration: MAX_SECONDS, includeClick: captureClick}});
     worklet.port.onmessage = ({data}) => {
       if (data === 'stopped') { recorderStopped = true; stopAcknowledged?.(); }
       else if (data?.type === 'started') {
@@ -118,9 +154,10 @@ async function startRecording() {
           setMode('recording'); animate();
           $('record-hint').textContent = 'Go ahead. Play on the beat.';
           status(`Recording at ${recordingTempo} BPM. The count-in is excluded from your take.`);
-          $('beat-display').textContent = $('record-click').checked ? 'Recording · beat 1' : 'Recording · click off';
+          $('beat-display').textContent = ($('record-click').checked || captureClick) ? 'Recording · beat 1' : 'Recording · click off';
         }
       } else if (data?.type === 'limit') { if (mode === 'recording') stopRecording(); }
+      else if (data?.type === 'mix') mixedChunks.push(data.samples);
       else if (data instanceof Float32Array) chunks.push(data);
     };
     // Worklet outputs silence: the input is never fed back to the speakers.
@@ -136,7 +173,8 @@ async function startRecording() {
     };
     setMode('countin'); setTimer(0);
     $('timer').textContent = 'Get ready';
-    recordingClick = createClickTrack(context, recordingTempo, countInStart, $('record-click').checked ? 0 : 4, recordingMeter, 4);
+    recordingClick = createClickTrack(context, recordingTempo, countInStart, ($('record-click').checked || captureClick) ? 0 : 4, recordingMeter, 4);
+    if (captureClick) recordingClick.connect(worklet, 0, 1);
     $('playback').hidden = true;
     $('record-hint').textContent = 'Four beats in. Start playing on the next beat.';
     status(`Counting in at ${recordingTempo} BPM. Use headphones to keep the click out of the input.`);
@@ -158,8 +196,9 @@ function encodeWav(samples, rate) {
 }
 async function stopRecording() {
   if (mode !== 'recording') return;
+  const viewport = {left: window.scrollX, top: window.scrollY};
   setMode('stopping'); clearTimeout(timeoutId); cancelAnimationFrame(frameId);
-  recordingClick?.port.postMessage('stop'); recordingClick?.disconnect(); recordingClick = undefined;
+  preserveViewport(viewport);
   // Flush the worklet's final partial buffer before closing the audio context.
   if (!recorderStopped) await new Promise(resolve => {
     const fallback = setTimeout(resolve, 1500);
@@ -174,27 +213,46 @@ async function stopRecording() {
     if (offset === total) break;
   }
   chunks = [];
+  const mixedSamples = captureClick ? new Float32Array(total) : null;
+  offset = 0;
+  for (const chunk of mixedChunks) {
+    const part = chunk.subarray(0, total - offset);
+    mixedSamples?.set(part, offset); offset += part.length;
+    if (offset === total) break;
+  }
+  mixedChunks = [];
   await cleanup();
   setTimer(total / recordingRate);
   if (total / recordingRate < .15) {
     setMode('idle'); status('That take was too short. Record a few notes, then stop again.', true); return;
   }
-  await processAudio(encodeWav(samples, recordingRate), false, recordingTempo, recordingMeter);
+  await processAudio(encodeWav(samples, recordingRate), false, recordingTempo, recordingMeter,
+    mixedSamples ? encodeWav(mixedSamples, recordingRate) : null);
 }
-async function processAudio(blob, demo, tempo = null, meter = {numerator: 4, denominator: 4}) {
+async function processAudio(blob, demo, tempo = null, meter = {numerator: 4, denominator: 4}, mixedBlob = null) {
   invalidateToleranceUpdate();
   setMode('processing');
   $('record-hint').textContent = 'Listening back to your melody…';
   status('Finding pitches and placing them on the staff…');
   if (playbackURL) URL.revokeObjectURL(playbackURL);
-  playbackURL = URL.createObjectURL(blob);
-  $('audio-playback').src = playbackURL; $('playback').hidden = false;
+  await stopPlaybackMetronome();
+  $('playback-click').disabled = !!mixedBlob;
+  if (mixedBlob) $('playback-click').checked = false;
+  $('playback-click').parentElement.title = mixedBlob ? 'The metronome is already embedded in this recording.' : '';
+  $('playback').querySelector('span').textContent = mixedBlob ? 'YOUR RECORDING · METRONOME INCLUDED' : 'YOUR RECORDING';
+  playbackURL = URL.createObjectURL(mixedBlob || blob);
+  const audio = $('audio-playback');
+  audio.pause(); audio.src = playbackURL; audio.load();
+  $('playback').hidden = false;
   cancelAnimationFrame(playbackFrame); scoreDuration = 0; latestScore = null;
+  const viewport = {left: window.scrollX, top: window.scrollY};
+  scoreView?.clear();
   // Clear old notation so a failed request cannot pair a previous score with new audio.
   $('score-result').hidden = true; $('score-empty').hidden = false;
   $('note-count').textContent = 'PROCESSING';
   $('score-subtitle').textContent = 'Finding the notes in this take…';
   $('score-footer-text').textContent = 'Listening comes first. The notation follows.';
+  preserveViewport(viewport);
   const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 90000);
   try {
     const body = new FormData(); body.append('audio', blob, 'recording.wav');
@@ -221,101 +279,31 @@ async function processAudio(blob, demo, tempo = null, meter = {numerator: 4, den
     status(error.name === 'AbortError' ? 'Analysis took too long. Try a shorter recording.' : error.message || 'Could not reach the server. Please try again.', true);
   } finally { clearTimeout(deadline); setMode('idle'); }
 }
-function svgElement(tag, attrs, text) {
-  const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
-  if (text !== undefined) element.textContent = text;
-  return element;
-}
 function renderResult(result, demo) {
   latestScore = {result, demo};
   showTolerance();
   const bass = selectedClef === 'bass';
-  const baseline = bass ? 18 : 30; // Bottom line: G2 or E4, both at sounding pitch.
   const notes = result.notes;
   const meter = result.time_signature || {numerator: 4, denominator: 4};
   const bpm = result.tempo || 100;
-  const quarterSeconds = 60 / bpm * meter.denominator / 4;
   $('note-count').textContent = `${notes.length} NOTE${notes.length === 1 ? '' : 'S'} DETECTED`;
   $('score-subtitle').textContent = `${demo ? 'Demo melody' : 'Your latest take'} · ${result.duration.toFixed(1)} seconds${result.tempo ? ` · ${result.tempo} BPM · ${meter.numerator}/${meter.denominator}` : ''}`;
-  $('score-footer-text').textContent = notes.length ? `${bass ? 'Bass' : 'Treble'} clef · notes shown at sounding pitch.` : 'Try a slower melody in a quieter room.';
+  $('score-footer-text').textContent = notes.length ? `${bass ? 'Bass' : 'Treble'} clef · notes shown at sounding pitch. Each bar = ${(meter.numerator * 60 / bpm).toFixed(3)} seconds at normal playback speed.` : 'Try a slower melody in a quieter room.';
   $('score-result').hidden = !notes.length; $('score-empty').hidden = !!notes.length;
   $('rhythm-caption').textContent = result.tempo ? `Estimated note lengths · ${result.timing_tolerance || 0}% undotted-note tolerance` : 'Pitch sketch · record with a tempo for note values';
   $('note-list').replaceChildren();
   if (!notes.length) return;
-  const root = $('staff'); root.replaceChildren();
-  let staff = root;
   scoreDuration = result.duration;
-  const highest = Math.max(...notes.map(note => note.octave * 7 + 'CDEFGAB'.indexOf(note.name[0])));
-  const lowest = Math.min(...notes.map(note => note.octave * 7 + 'CDEFGAB'.indexOf(note.name[0])));
-  const top = Math.max(100, (highest - baseline) * 6 - 48 + 65), bottom = top + 48;
-  const notationBottom = bottom + Math.max(0, (baseline - lowest) * 6);
-  const rowHeight = notationBottom + 95;
-  const notatedEnd = Math.max(scoreDuration, ...notes.map(note => (note.notation_start ?? note.start) + (note.duration_beats || 0) * quarterSeconds));
-  const barSeconds = meter.numerator * 60 / bpm, rowSeconds = barSeconds * 3;
-  const rowCount = Math.max(1, Math.ceil((notatedEnd - 1e-7) / rowSeconds));
-  const width = 900;
-  scoreLayout = {rowCount, rowSeconds, barSeconds, rowHeight, top, notationBottom};
-  root.setAttribute('viewBox', `0 0 ${width} ${rowCount * rowHeight}`);
-  root.setAttribute('width', width); root.setAttribute('height', rowCount * rowHeight);
-  root.append(svgElement('title', {}, `${meter.numerator}/${meter.denominator} score, three measures per row. ${notes.map(n => n.label).join(', ')}. Note values are estimated.`));
-  const rows = [];
-  for (let row = 0; row < rowCount; row++) {
-    const group = svgElement('g', {transform: `translate(0 ${row * rowHeight})`, 'data-score-row': row});
-    root.append(group); rows.push(group);
-    for (let i = 0; i < 5; i++) group.append(svgElement('line', {x1: 18, x2: 880, y1: top + i * 12, y2: top + i * 12, stroke: '#c5cdbd', 'stroke-width': 1}));
-    group.append(svgElement('text', {x: 28, y: top + 45, fill: '#506548', 'font-size': bass ? 60 : 68, 'font-family': 'Georgia, serif'}, bass ? '𝄢' : '𝄞'));
-    [meter.numerator, meter.denominator].forEach((value, i) => group.append(svgElement('text', {x: 94, y: top + 21 + i * 25, 'text-anchor': 'middle', 'font-size': 25, 'font-family': 'Georgia, serif', fill: '#315c48'}, value)));
-    for (let bar = 0; bar <= 3; bar++) {
-      const x = 130 + bar * 250;
-      group.append(svgElement('line', {x1: x, x2: x, y1: top, y2: bottom, stroke: '#89977f', 'stroke-width': 1.2, 'data-barline': bar}));
-      if (bar < 3) group.append(svgElement('text', {x: x + 5, y: top - 15, 'font-size': 10, fill: '#8a957e'}, row * 3 + bar + 1));
-    }
+  try {
+    if (!scoreView) scoreView = new AlphaScoreView($('staff'), $('audio-playback'), message => status(message, true));
+    const viewport = {left: window.scrollX, top: window.scrollY};
+    scoreView.render(result, selectedClef);
+    preserveViewport(viewport);
+  } catch (error) {
+    $('score-footer-text').textContent = 'Score rendering failed. Your recorded audio is still available.';
+    status(error.message || 'Could not load the notation library.', true);
   }
-  notes.forEach((note, index) => {
-    const onset = note.notation_start ?? note.start;
-    const notePosition = scorePosition(onset);
-    const x = notePosition.x;
-    // Reposition pitches for the selected clef without transposing the audio.
-    const diatonic = note.octave * 7 + 'CDEFGAB'.indexOf(note.name[0]);
-    const y = bottom - (diatonic - baseline) * 6;
-    const parts = note.notation || [{value: 'pitch', dotted: false, offset_beats: 0}];
-    let previousPosition;
-    parts.forEach((part, partIndex) => {
-      const position = scorePosition(onset + part.offset_beats * quarterSeconds);
-      const px = position.x;
-      staff = rows[position.row];
-      for (let lineY = bottom + 12; lineY <= y; lineY += 12) staff.append(svgElement('line', {x1: px - 14, x2: px + 14, y1: lineY, y2: lineY, stroke: '#87967e'}));
-      for (let lineY = top - 12; lineY >= y; lineY -= 12) staff.append(svgElement('line', {x1: px - 14, x2: px + 14, y1: lineY, y2: lineY, stroke: '#87967e'}));
-      if (note.name.includes('#')) staff.append(svgElement('text', {x: px - 24, y: y + 6, fill: '#315c48', 'font-size': 23}, '♯'));
-      const group = svgElement('g', {});
-      group.append(svgElement('title', {}, `${note.label}, ${part.dotted ? 'dotted ' : ''}${part.value}, ${note.frequency} Hz, starts at ${note.start}s, lasts ${note.duration}s`));
-      group.append(svgElement('ellipse', {cx: px, cy: y, rx: part.value === 'whole' ? 10 : 8, ry: 5.5, transform: `rotate(-18 ${px} ${y})`, fill: ['pitch', 'whole', 'half'].includes(part.value) ? '#fffefa' : '#315c48', stroke: '#315c48', 'stroke-width': 2.1}));
-      if (!['pitch', 'whole'].includes(part.value)) {
-        const up = y >= top + 24;
-        const stemX = px + (up ? 7 : -7), stemEnd = y + (up ? -34 : 34);
-        group.append(svgElement('line', {x1: stemX, x2: stemX, y1: y, y2: stemEnd, stroke: '#315c48', 'stroke-width': 1.7}));
-        const flags = part.value === 'sixteenth' ? 2 : part.value === 'eighth' ? 1 : 0;
-        for (let flag = 0; flag < flags; flag++) {
-          const fy = stemEnd + (up ? 7 : -7) * flag, dir = up ? 1 : -1;
-          group.append(svgElement('path', {d: `M ${stemX} ${fy} Q ${stemX + 17} ${fy + 10 * dir} ${stemX + 7} ${fy + 21 * dir} Q ${stemX + 15} ${fy + 9 * dir} ${stemX} ${fy + 7 * dir}`, fill: '#315c48'}));
-        }
-      }
-      if (part.dotted) group.append(svgElement('circle', {cx: px + 17, cy: y - (Math.abs(y - bottom) % 12 === 0 ? 6 : 0), r: 2.2, fill: '#315c48'}));
-      if (previousPosition) {
-        const tie = (target, from, to) => target.append(svgElement('path', {d: `M ${from} ${y + 10} Q ${(from + to) / 2} ${y + 27} ${to} ${y + 10}`, fill: 'none', stroke: '#315c48', 'stroke-width': 1.4}));
-        if (previousPosition.row === position.row) tie(group, previousPosition.x + 8, px - 8);
-        else {
-          tie(rows[previousPosition.row], previousPosition.x + 8, 877);
-          tie(group, 133, px - 8);
-        }
-      }
-      previousPosition = position;
-      staff.append(group);
-    });
-    staff = rows[notePosition.row];
-    staff.append(svgElement('text', {x, y: notationBottom + 58, 'text-anchor': 'middle', fill: '#415d3d', 'font-size': 12, 'font-family': 'Arial,sans-serif'}, note.label.replace('#', '♯')));
-    staff.append(svgElement('text', {x, y: notationBottom + 75, 'text-anchor': 'middle', fill: '#919c85', 'font-size': 9, 'font-family': 'Arial,sans-serif'}, `${note.start.toFixed(1)}s`));
+  notes.forEach(note => {
     const chip = document.createElement('div'); chip.className = 'note-chip';
     const label = document.createElement('strong'); label.textContent = note.label.replace('#', '♯');
     const detail = document.createElement('span'); detail.textContent = `${note.duration.toFixed(2)}s · ${note.frequency} Hz`;
@@ -326,10 +314,6 @@ function renderResult(result, demo) {
     }
     chip.append(label, detail); $('note-list').append(chip);
   });
-  root.append(svgElement('line', {id: 'playback-cursor', x1: 120, x2: 120,
-    y1: 12, y2: notationBottom + 30, stroke: '#bd6c42', 'stroke-width': 2,
-    'pointer-events': 'none', 'aria-hidden': 'true'}));
-  $('score-result').querySelector('.score-scroll').scrollLeft = 0;
   updatePlaybackCursor();
 }
 async function demoMelody() {
@@ -391,40 +375,23 @@ listInputs();
 $('record-button').addEventListener('click', () => mode === 'countin' ? cancelCountIn() : mode === 'recording' ? stopRecording() : startRecording());
 $('demo-button').addEventListener('click', demoMelody);
 window.addEventListener('resize', () => { if (mode !== 'recording') drawWave(); });
-window.addEventListener('pagehide', () => { previewContext?.close(); recordingClick?.disconnect(); stream?.getTracks().forEach(track => track.stop()); context?.close(); if (playbackURL) URL.revokeObjectURL(playbackURL); });
+window.addEventListener('pagehide', () => { scoreView?.destroy(); previewContext?.close(); playbackContext?.close(); recordingClick?.disconnect(); playbackClick?.disconnect(); stream?.getTracks().forEach(track => track.stop()); context?.close(); if (playbackURL) URL.revokeObjectURL(playbackURL); });
 drawWave();
 
-function scorePosition(time) {
-  const layout = scoreLayout;
-  const bounded = Math.max(0, Math.min(time + 1e-8, layout.rowCount * layout.rowSeconds - 1e-7));
-  const row = Math.floor(bounded / layout.rowSeconds);
-  const localTime = bounded - row * layout.rowSeconds;
-  const bar = Math.min(2, Math.floor(localTime / layout.barSeconds));
-  const fraction = (localTime - bar * layout.barSeconds) / layout.barSeconds;
-  return {row, x: 130 + bar * 250 + fraction * 250};
-}
 function updatePlaybackCursor() {
-  const audio = $('audio-playback'), cursor = $('playback-cursor');
-  if (!cursor || !scoreDuration || !scoreLayout) return;
-  const position = scorePosition(Math.min(scoreDuration, audio.currentTime));
-  const offset = position.row * scoreLayout.rowHeight;
-  cursor.setAttribute('x1', position.x); cursor.setAttribute('x2', position.x);
-  cursor.setAttribute('y1', offset + 12); cursor.setAttribute('y2', offset + scoreLayout.notationBottom + 30);
-  // Follow new rows during playback/seeking without horizontal scrolling.
-  if (cursor.dataset.row !== String(position.row)) {
-    cursor.dataset.row = String(position.row);
-    if (!audio.paused || audio.currentTime > 0) cursor.scrollIntoView({block: 'center', behavior: 'auto'});
-  }
+  scoreView?.sync();
 }
 function animatePlayback() {
   cancelAnimationFrame(playbackFrame);
   updatePlaybackCursor();
   if (!$('audio-playback').paused && !$('audio-playback').ended) playbackFrame = requestAnimationFrame(animatePlayback);
 }
-$('audio-playback').addEventListener('play', animatePlayback);
-['timeupdate', 'seeking', 'seeked', 'loadedmetadata'].forEach(event => $('audio-playback').addEventListener(event, updatePlaybackCursor));
+$('audio-playback').addEventListener('play', () => { animatePlayback(); startPlaybackMetronome(); });
+$('audio-playback').addEventListener('playing', () => { startPlaybackMetronome(); animatePlayback(); });
+$('audio-playback').addEventListener('waiting', stopPlaybackMetronome);
+['timeupdate', 'seeking', 'seeked', 'loadedmetadata', 'ratechange', 'waiting'].forEach(event => $('audio-playback').addEventListener(event, updatePlaybackCursor));
 ['pause', 'ended', 'emptied'].forEach(event => $('audio-playback').addEventListener(event, () => {
-  cancelAnimationFrame(playbackFrame); updatePlaybackCursor();
+  cancelAnimationFrame(playbackFrame); updatePlaybackCursor(); stopPlaybackMetronome();
 }));
 
 function selectClef(clef) {
@@ -452,6 +419,7 @@ function updateMetronomeControls() {
   $('meter-denominator').disabled = locked || !!previewContext;
   $('audio-output').disabled = locked || !!previewContext || !window.AudioContext?.prototype.setSinkId;
   $('record-click').disabled = locked;
+  $('capture-click').disabled = locked;
   $('timing-tolerance').disabled = locked;
   $('demo-button').disabled = locked;
   ['audio-device', 'audio-channel', 'refresh-inputs'].forEach(id => $(id).disabled = locked);
@@ -468,14 +436,14 @@ function createClickTrack(audioContext, bpm, startTime, beatLimit = 0, meter = r
   });
   node.port.onmessage = ({data}) => {
     if (data?.type !== 'beat') return;
-    if (node !== previewClick && node !== recordingClick) return;
+    if (node !== previewClick && node !== recordingClick && node !== playbackClick) return;
     const inCount = data.beat < countInBeats;
     const beatNumber = inCount ? data.beat : (data.beat - countInBeats) % meter.numerator;
     document.querySelectorAll('.beat-dots i').forEach((dot, i) => dot.classList.toggle('active', i === beatNumber));
     if (mode === 'countin' && data.beat < 4) {
       $('timer').textContent = String(data.beat + 1);
       $('beat-display').textContent = `Count-in · ${data.beat + 1} of 4`;
-    } else $('beat-display').textContent = `${bpm} BPM · beat ${beatNumber + 1} of ${meter.numerator}`;
+    } else $('beat-display').textContent = `${node === playbackClick ? `Playback · bar ${Math.floor(data.beat / meter.numerator) + 1}` : `${bpm} BPM`} · beat ${beatNumber + 1} of ${meter.numerator}`;
   };
   // Output-only node: never connected to the microphone, meter, or recorder.
   node.connect(audioContext.destination);
@@ -524,7 +492,7 @@ async function toggleMetronomePreview() {
 }
 async function cancelCountIn(message = 'Count-in cancelled. Nothing was recorded.') {
   if (mode !== 'countin') return;
-  setMode('stopping'); await cleanup(); chunks = [];
+  setMode('stopping'); await cleanup(); chunks = []; mixedChunks = [];
   setTimer(0); setMode('idle');
   $('record-hint').textContent = 'Ready when you are.';
   status(message);
@@ -532,9 +500,16 @@ async function cancelCountIn(message = 'Count-in cancelled. Nothing was recorded
 $('metronome-play').addEventListener('click', toggleMetronomePreview);
 $('click-volume').addEventListener('input', () => {
   const message = {type: 'volume', value: Number($('click-volume').value) / 100 * .5};
-  previewClick?.port.postMessage(message); recordingClick?.port.postMessage(message);
+  previewClick?.port.postMessage(message); recordingClick?.port.postMessage(message); playbackClick?.port.postMessage(message);
 });
 $('audio-playback').addEventListener('play', () => { if (previewContext) stopMetronomePreview(); });
+$('audio-playback').addEventListener('seeking', stopPlaybackMetronome);
+$('audio-playback').addEventListener('ratechange', () => { stopPlaybackMetronome(); startPlaybackMetronome(); });
+$('audio-playback').addEventListener('seeked', () => { if (!$('audio-playback').paused) startPlaybackMetronome(); });
+$('playback-click').addEventListener('change', () => {
+  if ($('playback-click').checked) startPlaybackMetronome();
+  else stopPlaybackMetronome();
+});
 updateMetronomeControls();
 
 function readMeter() {

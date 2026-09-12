@@ -17,8 +17,8 @@ def assign_note_values(result, tempo, numerator=4, denominator=4, tolerance=0):
         raise ValueError('Tempo must be a whole number between 40 and 240 BPM.')
     if not isinstance(numerator, int) or not 1 <= numerator <= 12 or denominator not in (2, 4, 8, 16):
         raise ValueError('Time signature requires 1–12 beats and a beat note of 2, 4, 8, or 16.')
-    if not math.isfinite(tolerance) or not 0 <= tolerance <= 15:
-        raise ValueError('Timing tolerance must be between 0 and 15 percent.')
+    if not math.isfinite(tolerance) or not 0 <= tolerance <= 25:
+        raise ValueError('Timing tolerance must be between 0 and 25 percent.')
     result['timing_tolerance'] = tolerance
     result['time_signature'] = {'numerator': numerator, 'denominator': denominator}
     measure_quarters = numerator * 4 / denominator

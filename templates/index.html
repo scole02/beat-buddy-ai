@@ -7,6 +7,9 @@
   <title>Fret & Field — Your practice, on paper</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='vendor/alphatab/alphaTab.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='musicxml.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='score-view.js') }}" defer></script>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
 <body>
@@ -30,11 +33,13 @@
             <label>Click volume <input id="click-volume" type="range" min="0" max="100" value="35"></label>
           </div>
           <div class="meter-controls"><label>Beats per measure <input id="meter-numerator" type="number" min="1" max="12" step="1" value="4"></label><label>One beat is a <select id="meter-denominator"><option value="2">Half note (2)</option><option value="4" selected>Quarter note (4)</option><option value="8">Eighth note (8)</option><option value="16">Sixteenth note (16)</option></select></label></div>
-          <label class="timing-setting" for="timing-tolerance">Timing tolerance <output id="tolerance-value">0%</output><input id="timing-tolerance" type="range" min="0" max="15" step="1" value="0"></label>
+          <label class="timing-setting" for="timing-tolerance">Timing tolerance <output id="tolerance-value">0%</output><input id="timing-tolerance" type="range" min="0" max="25" step="1" value="0"></label>
           <p id="tolerance-hint">0% adds no extra allowance; note lengths still round to the nearest sixteenth.</p>
           <p>BPM counts the selected beat note. The first beat of each measure is accented.</p>
           <div class="beat-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           <label class="click-option"><input id="record-click" type="checkbox" checked> Keep metronome playing during recording</label>
+          <label class="click-option"><input id="capture-click" type="checkbox"> Include metronome in saved audio (timing experiment)</label>
+          <p class="device-info">This option also keeps the headphone click on. The four-beat count-in is excluded; note detection uses clean instrument audio.</p>
           <p id="output-hint">Use headphones to keep the click out of your recording. Choose headphones or Scarlett as your system output, or use Find inputs to list available outputs.</p>
           <p>Record starts with 4 count-in beats. Start playing on the next beat; the count-in is excluded from your take.</p>
         </section>
@@ -47,7 +52,7 @@
           <span class="limit">Up to 60 seconds per take</span>
         </div>
         <div class="input-row"><span>INPUT LEVEL</span><div class="meter" id="meter" aria-label="Microphone input level"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span id="input-state">Standby</span></div>
-        <div class="playback" id="playback" hidden><span>YOUR RECORDING</span><audio id="audio-playback" controls></audio></div>
+        <div class="playback" id="playback" hidden><span>YOUR RECORDING</span><audio id="audio-playback" controls></audio><label class="click-option playback-click"><input id="playback-click" type="checkbox"> Play metronome with recording</label></div>
         <div class="status" id="status" role="status" aria-live="polite">Microphone access is requested when you record.</div>
       </section>
       <aside class="practice-notes">
@@ -59,11 +64,11 @@
         <div class="section-heading"><span class="step">02</span><h2 id="score-title">Your melody, written down</h2><span class="score-tag" id="note-count">NO NOTES YET</span></div>
         <div class="score-meta"><span id="score-subtitle">A fresh page for your next idea.</span><div class="clef-toggle" role="group" aria-label="Staff clef"><button id="bass-clef" type="button" aria-pressed="true">Bass clef</button><button id="treble-clef" type="button" aria-pressed="false">Treble clef</button></div></div>
         <div id="score-empty" class="score-empty"><div class="empty-staff" aria-hidden="true"><span id="empty-clef">𝄢</span><i></i><i></i><i></i><i></i><i></i></div><div class="empty-caption"><span class="little-note">♪</span><h3>A little silence before the music.</h3><p>Record a melody above. The notes you play will appear here.</p></div></div>
-        <div id="score-result" hidden><div class="score-scroll" tabindex="0" aria-label="Musical score, three measures per row"><svg id="staff" role="img" aria-label="Transcribed guitar notes"></svg></div><div id="note-list" class="note-list" aria-label="Detected notes"></div></div>
+        <div id="score-result" hidden><div class="score-scroll" tabindex="0" aria-label="Musical score, three measures per row"><div id="staff" aria-label="Transcribed guitar notes"></div></div><div class="score-download"><a id="download-musicxml" download="my-melody.musicxml" hidden>Download MusicXML</a></div><div id="note-list" class="note-list" aria-label="Detected notes"></div></div>
         <div class="score-footer"><span><span class="small-dot"></span><span id="score-footer-text">Listening comes first. The notation follows.</span></span><span id="rhythm-caption">Note values estimated from the recording tempo</span></div>
       </section>
     </div>
-    <footer><span>Made for the moments between “almost” and “got it.”</span><span>Single-note melodies <span class="dot-divider">·</span> A4 = 440 Hz <span class="dot-divider">·</span> C2–E6</span></footer>
+    <footer><span>Made for the moments between “almost” and “got it.”</span><span>Single-note melodies <span class="dot-divider">·</span> A4 = 440 Hz <span class="dot-divider">·</span> E1–E6</span></footer>
   </main>
 </body>
 </html>

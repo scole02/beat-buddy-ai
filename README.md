@@ -28,7 +28,7 @@ tab. Embedded browser microphone permissions may differ. A take stops at 60 seco
 
 ## What this first version detects
 
-- One note at a time, in the sounding range C2–E6; reference tuning A4 = 440 Hz.
+- One note at a time, in the sounding range E1–E6; reference tuning A4 = 440 Hz.
 - NumPy-based YIN periodicity estimation with energy gating and note segmentation.
 - All analysis runs in Flask. AudioWorklet captures mono PCM in the browser and
   sends a 16-bit WAV after recording stops. There is no transcription service.
@@ -114,6 +114,9 @@ at the same position when switching. Bass clef is the default.
   leaves the count-in active but silences subsequent clicks. The independent
   preview button works regardless of this checkbox. The volume slider works
   during preview, count-in, and recording; zero volume also silences the count-in.
+- Use **Play metronome with recording** below the audio player to replay a take
+  against the tempo and meter used when it was recorded. The click follows
+  playback pauses, seeks, and resumes.
 - Clicks run on the Web Audio render clock rather than JavaScript timers, with
   an accent every four beats. The recording start uses the same clock and capture
   stops at 60 seconds of actual recorded audio, excluding the count-in.
@@ -124,7 +127,7 @@ at the same position when switching. Bass clef is the default.
   calibration. Tempo is fixed per take and remains attached to its score even if
   you change the tempo for the next take.
 - Values include sixteenth, eighth, quarter, half, whole, and dotted values. Notes
-  longer than a whole note are represented as tied components. Notes are split and tied at measure boundaries; rests remain blank space.
+  longer than a whole note are represented as tied components. Notes are split and tied at measure boundaries; rests are included in the MusicXML score.
   Timestamps and the playback cursor follow the recording.
 
 Additional checks: `node tests/audio-clock.cjs` exercises count-in exclusion,
@@ -140,19 +143,54 @@ then the recording starts on beat one of a fresh measure, regardless of meter.
 
 Each take stores its meter with its tempo. Scores have three measures per row,
 with additional rows for longer recordings, repeated clefs/time signatures, bar
-numbers, and ties across barlines and row breaks. The final row can contain empty
-trailing measures. Estimated onsets and lengths snap to a sixteenth-note grid for
+numbers, and ties across barlines and row breaks. The final measure is padded with rests without stretching the recording to fit it. Estimated onsets and lengths snap to a sixteenth-note grid for
 notation; audio playback uses the original timing, and its cursor follows the rows.
 Changing the meter controls configures the next take; it does not reinterpret an
-existing take. Rests are shown as blank time, not explicit rest glyphs.
+existing take. Silence is represented with explicit rest glyphs.
 
 ## Timing tolerance
 
-The 0–15% slider favors undotted sixteenth, eighth, quarter, half, and whole
+The 0–25% slider favors undotted sixteenth, eighth, quarter, half, and whole
 lengths within the chosen percentage of their ideal duration. At 100 BPM in 4/4,
-15% accepts 0.510–0.690 seconds as a quarter note. Outside this window, the existing
+25% accepts 0.450–0.750 seconds as a quarter note. Outside this window, the existing
 sixteenth-grid rounding applies. 0% disables the extra preference, not duration
 quantization. Barline splits can still require dots/ties. Changing the slider
 recalculates an existing take without retranscribing or altering the audio; its
 original tempo and meter are retained. New recordings use the selected tolerance.
-The playback cursor now maps time continuously across measures within each row.
+alphaTab moves and wraps the playback cursor using the recorded audio clock and score rhythm.
+
+
+## alphaTab and MusicXML
+
+The app uses **alphaTab 1.8.4** for music engraving, three-bar systems, rest and tie
+rendering, score ticks, and the playback cursor. The pinned browser bundle and
+Bravura fonts are served locally from `static/vendor/alphatab/`, with their MPL-2.0
+and SIL OFL licenses. No npm runtime, CDN, soundfont, or new Python dependency is
+required; Flask continues to run with uv.
+
+`static/musicxml.js` converts detected notes into one MusicXML voice. Durations and
+onsets use the existing sixteenth-note quantization and tolerance settings. Gaps
+become rests, notes split and tie across barlines, and every measure is filled.
+Quantized notes are trimmed at the next attack; if attacks collide on the same grid
+position, the higher-confidence detection wins. Measured detection data stays intact.
+MusicXML uses equivalent quarter-note BPM for reliable import, including 6/8 and
+half-note beat units. Bass/treble clefs show sounding pitch, including C2 and D2.
+
+`static/score-view.js` loads the XML through alphaTab and anchors each measure to
+its absolute time (`measure index × beats per measure × 60 / BPM`). It uses
+alphaTab's external-media mode with the existing recording player. Pauses, seeks,
+buffering and playback-rate changes update the engine; there is no independent
+score animation timer. A partial final measure is not stretched to fill the audio.
+Music engraving uses rhythmic spacing, so cursor pixel speed may vary between
+notes, while the score's musical time remains tied to the recording.
+
+Use **Download MusicXML** below the score to open the same notation in another
+notation editor. MIDI is not used as an intermediate format; MusicXML carries the
+clef, written durations, rests and ties directly. alphaTab does not transcribe audio,
+infer better rhythms, or calibrate hardware latency. The clean transcription track,
+optional embedded metronome experiment, and headphone routing remain available.
+
+Checks: `node tests/score-layout.cjs` round-trips XML through the actual alphaTab
+importer across 120 tempo/meter combinations; `node tests/score-playback.cjs`
+checks the media bridge, rate changes, seek feedback, and rerenders. Existing
+`audio-clock.cjs`, `audio-routing.cjs`, `playback-clock.cjs` and Python tests still apply.

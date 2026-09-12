@@ -1,7 +1,7 @@
 """YIN pitch estimation and conservative monophonic note segmentation.
 
 This is a pitch sketch, not beat-quantized sheet music or chord recognition.
-The detector supports sounding pitches C2–E6 (with a little tuning tolerance).
+The detector supports sounding pitches E1–E6 (with a little tuning tolerance).
 """
 import numpy as np
 
@@ -16,7 +16,7 @@ def estimate_pitch(frame, sample_rate=RATE):
     frame = frame - np.mean(frame)
     # Fixed-length comparison windows avoid lag-dependent energy bias.
     size = len(frame) // 2
-    max_lag = int(sample_rate / 60)
+    max_lag = int(sample_rate / 38)
     min_lag = max(2, int(sample_rate / 1400))
     reference = frame[:size]
     fft_size = 1 << (len(frame) + size - 2).bit_length()
@@ -56,7 +56,7 @@ def transcribe(samples, sample_rate):
     for frame, rms in zip(frames, energy):
         hz, certainty = estimate_pitch(frame, sample_rate) if rms >= gate else (0, 0)
         midi = int(round(69 + 12 * np.log2(hz / 440))) if hz else 0
-        pitches.append(midi if 36 <= midi <= 88 else 0)
+        pitches.append(midi if 28 <= midi <= 88 else 0)
         frequencies.append(hz)
         confidence.append(certainty)
     pitches = np.array(pitches)

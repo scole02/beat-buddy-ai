@@ -11,3 +11,13 @@
 .meter-controls{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}.meter-controls label{display:flex;flex-direction:column;gap:5px;font-size:10px;color:var(--muted)}.meter-controls input{width:70px;padding:7px;border:1px solid var(--line);border-radius:5px;color:var(--ink)}.meter-controls select{margin:0}.audio-settings .output-label{margin-top:12px}.score-scroll{overflow-x:hidden}.score-scroll svg{width:100%;height:auto;min-width:0}.beat-dots{flex-wrap:wrap}
 
 .timing-setting{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;margin-top:15px;color:var(--ink)}.timing-setting input{flex:1;min-width:100px;accent-color:var(--green)}.timing-setting output{font-variant-numeric:tabular-nums;min-width:30px}
+
+/* alphaTab manages score systems and cursor positioning. */
+#staff { position:relative; min-height:180px; width:100%; color:#315c48; }
+#staff svg { min-width:0; }
+.at-cursor-bar { background:rgba(113,137,88,.08); }
+.at-cursor-beat { background:#bd6c42; width:2px; }
+.at-selection div { background:rgba(113,137,88,.15); }
+.at-highlight * { fill:#bd6c42; stroke:#bd6c42; }
+.score-download { padding:0 25px 18px; font-size:12px; }
+.score-download a { color:var(--green); text-underline-offset:3px; }

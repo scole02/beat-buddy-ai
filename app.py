@@ -82,7 +82,7 @@ def update_rhythm():
             data.get('numerator', 4), data.get('denominator', 4), float(data.get('tolerance', 0)))
         return jsonify(result)
     except (ValueError, TypeError, KeyError, OverflowError):
-        return jsonify(error='Invalid note timings, time signature, or tolerance (0–15%).'), 400
+        return jsonify(error='Invalid note timings, time signature, or tolerance (0–25%).'), 400
 
 @app.errorhandler(RequestEntityTooLarge)
 def too_large(_error):

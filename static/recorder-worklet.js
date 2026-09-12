@@ -7,14 +7,20 @@ class PCMRecorder extends AudioWorkletProcessor {
     this.started = false;
     this.active = true;
     this.buffer = new Float32Array(2048);
+    this.includeClick = !!processorOptions.includeClick;
+    this.mixBuffer = new Float32Array(2048);
     this.offset = 0;
     this.port.onmessage = ({data}) => { if (data === 'stop') this.finish(); };
   }
   finish() {
-    if (this.active && this.offset) this.port.postMessage(this.buffer.slice(0, this.offset));
+    if (this.active && this.offset) this.flush(this.offset);
     this.offset = 0;
     this.active = false;
     this.port.postMessage('stopped');
+  }
+  flush(length) {
+    this.port.postMessage(this.buffer.slice(0, length));
+    if (this.includeClick) this.port.postMessage({type: 'mix', samples: this.mixBuffer.slice(0, length)});
   }
   process(inputs) {
     const channel = inputs[0]?.[0];
@@ -25,10 +31,13 @@ class PCMRecorder extends AudioWorkletProcessor {
           this.started = true;
           this.port.postMessage({type: 'started'});
         }
-        this.buffer[this.offset++] = channel[i];
+        this.buffer[this.offset] = channel[i];
+        // Separate input preserves clean pitch analysis; equal headroom prevents mix clipping.
+        if (this.includeClick) this.mixBuffer[this.offset] = .5 * channel[i] + .5 * (inputs[1]?.[0]?.[i] || 0);
+        this.offset++;
         this.captured++;
         if (this.offset === this.buffer.length) {
-          this.port.postMessage(this.buffer);
+          this.flush(this.offset);
           this.offset = 0;
         }
         if (this.captured === this.maxSamples) {

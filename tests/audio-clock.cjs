@@ -69,3 +69,45 @@ for (const beatsPerMeasure of [3,6]) {
   }
 }
 console.log('3/4 and 6/8 accent tests passed, including the fresh downbeat after four count-in clicks.');
+// At 90 BPM, the four count-in pulses precede sample zero. The fifth
+// recording click belongs to bar two, exactly 2 2/3 seconds into the WAV.
+{
+  const rate = 48000, bpm = 90, beatFrames = rate * 60 / bpm;
+  const metro = load('static/metronome-worklet.js', rate);
+  const recorder = load('static/recorder-worklet.js', rate);
+  const startTime = .15, recordingStart = startTime + 4 * 60 / bpm;
+  const click = metro.make({bpm, startTime, volume: .2, beatsPerMeasure: 4, countInBeats: 4});
+  const capture = recorder.make({startTime: recordingStart, maxDuration: 3});
+  const recordedBeats = [];
+  for (let frame = 0; frame < (recordingStart + 3) * rate; frame += 128) {
+    metro.scope.currentFrame = recorder.scope.currentFrame = frame;
+    const out = new Float32Array(128); click.process([], [[out]]);
+    // Capture a synthetic loopback to verify the two worklet clocks align.
+    capture.process([[out]]);
+  }
+  const samples = recorder.messages.filter(m => m instanceof Float32Array).flatMap(m => [...m]);
+  for (let i = 1; i < samples.length; i++) {
+    if (samples[i] !== 0 && samples[i - 1] === 0 && (i < 2 || samples[i - 2] === 0)) recordedBeats.push(i);
+  }
+  assert.deepEqual(recordedBeats, [1, 32001, 64001, 96001, 128001]);
+  assert.equal(recordedBeats.filter(frame => frame < 4 * beatFrames).length, 4);
+  console.log('90 BPM regression passed: four beats in first recorded bar; no count-in samples.');
+}
+// A second worklet input captures the actual synthesized click, while analysis
+// receives unchanged instrument samples. Both tracks exclude the same pre-roll.
+{
+  const {scope, messages, make} = load('static/recorder-worklet.js');
+  const node = make({startTime: 100 / 48000, maxDuration: 2200 / 48000, includeClick: true});
+  for (let frame = 0; frame < 2400; frame += 128) {
+    scope.currentFrame = frame;
+    node.process([[new Float32Array(128).fill(.25)], [new Float32Array(128).fill(.5)]]);
+  }
+  const clean = messages.filter(m => m instanceof Float32Array).flatMap(m => [...m]);
+  const mix = messages.filter(m => m?.type === 'mix').flatMap(m => [...m.samples]);
+  assert.equal(clean.length, 2200);
+  assert.equal(mix.length, clean.length);
+  assert.ok(clean.every(v => v === .25));
+  assert.ok(mix.every(v => v === .375));
+  assert.equal(messages.at(-2), 'stopped');
+  console.log('Embedded click capture passed: clean analysis, aligned mixed audio, pre-roll exclusion and partial flush.');
+}
