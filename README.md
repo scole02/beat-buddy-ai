@@ -1,5 +1,7 @@
 # Fret & Field
 
+[Open the live practice room](https://beat-buddy-ai.onrender.com/) · Hosted on Render's free plan; the first visit after inactivity may take about a minute to load. AI coaching requires the shared access code.
+
 A Flask guitar practice app. Record a melody with your laptop microphone, stop,
 and see the detected pitches and estimated note lengths on a bass- or treble-clef staff. Includes a live input meter,
 recording playback, a demo melody processed by the same backend, and note timing
