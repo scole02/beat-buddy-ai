@@ -10,6 +10,7 @@ let recordingStartTime = 0, recordingTempo = 100, recorderStopped = false;
 let selectedClef = 'bass', latestScore = null;
 let playbackFrame, scoreDuration = 0, scoreView;
 const MAX_SECONDS = 60;
+let recordingReference = null, recordingLimit = MAX_SECONDS;
 
 function status(message, error = false) {
   $('status').textContent = message;
@@ -23,14 +24,16 @@ function preserveViewport(position = {left: window.scrollX, top: window.scrollY}
 }
 function setMode(next) {
   mode = next;
+  if (['starting', 'processing'].includes(next)) window.CoachingUI?.clear();
   document.body.classList.toggle('is-recording', mode === 'recording');
   document.body.classList.toggle('is-counting', mode === 'countin');
   $('record-button').disabled = !['idle', 'recording', 'countin'].includes(mode) || metroStarting;
   $('demo-button').disabled = mode !== 'idle';
-  ['audio-device', 'audio-channel', 'refresh-inputs'].forEach(id => $(id).disabled = mode !== 'idle');
+  ['audio-device', 'audio-channel', 'refresh-inputs', 'bass-clef', 'treble-clef'].forEach(id => $(id).disabled = mode !== 'idle');
   $('record-label').textContent = ({idle: 'Start recording', starting: 'Connecting…', countin: 'Cancel count-in', recording: 'Stop & see notes', stopping: 'Finishing…', processing: 'Finding your notes…'})[mode];
   $('state-tag').textContent = ({idle: 'READY', starting: 'CONNECTING', countin: 'COUNT-IN', recording: 'RECORDING', stopping: 'FINISHING', processing: 'PROCESSING'})[mode];
   updateMetronomeControls();
+  window.PracticeUI?.lock(mode !== 'idle');
 }
 function setTimer(seconds) {
   const tenths = Math.floor(seconds * 10) % 10;
@@ -68,8 +71,9 @@ function animate() {
   const level = Math.min(12, Math.round(rms * 65));
   [...$('meter').children].forEach((bar, i) => bar.classList.toggle('on', i < level));
   $('input-state').textContent = rms > .25 ? 'Too loud' : rms > .008 ? 'Receiving' : 'Quiet';
-  const seconds = Math.min(MAX_SECONDS, Math.max(0, context.currentTime - recordingStartTime));
+  const seconds = Math.min(recordingLimit, Math.max(0, context.currentTime - recordingStartTime));
   setTimer(seconds);
+  if (recordingReference) scoreView?.sync();
   frameId = requestAnimationFrame(animate);
 }
 async function cleanup() {
@@ -113,12 +117,21 @@ async function startPlaybackMetronome() {
   }
 }
 async function startRecording() {
+  const initialViewport = {left: window.scrollX, top: window.scrollY};
   setMode('starting');
   $('audio-playback').pause();
   status('Allow microphone access in your browser to start your take.');
+  preserveViewport(initialViewport);
   try {
     recordingTempo = readTempo();
-    recordingMeter = readMeter();
+    recordingReference = window.PracticeUI?.selected(recordingTempo) || null;
+    recordingLimit = recordingReference ? recordingReference.reference.duration : MAX_SECONDS;
+    recordingMeter = recordingReference ? recordingReference.reference.time_signature : readMeter();
+    if (recordingReference) {
+      const viewport = {left: window.scrollX, top: window.scrollY};
+      window.PracticeUI.preview(recordingReference);
+      preserveViewport(viewport);
+    }
     await stopMetronomePreview();
     if (!navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) throw new Error('Use a current browser on localhost or an HTTPS connection to record audio.');
     context = new AudioContext({sampleRate: 48000});
@@ -146,7 +159,7 @@ async function startRecording() {
     recordingStartTime = countInStart + 4 * 60 / recordingTempo;
     source = context.createMediaStreamSource(stream);
     analyser = context.createAnalyser(); analyser.fftSize = 2048;
-    worklet = new AudioWorkletNode(context, 'pcm-recorder', {numberOfInputs: captureClick ? 2 : 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit', processorOptions: {startTime: recordingStartTime, maxDuration: MAX_SECONDS, includeClick: captureClick}});
+    worklet = new AudioWorkletNode(context, 'pcm-recorder', {numberOfInputs: captureClick ? 2 : 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit', processorOptions: {startTime: recordingStartTime, maxDuration: recordingLimit, includeClick: captureClick}});
     worklet.port.onmessage = ({data}) => {
       if (data === 'stopped') { recorderStopped = true; stopAcknowledged?.(); }
       else if (data?.type === 'started') {
@@ -173,9 +186,11 @@ async function startRecording() {
     };
     setMode('countin'); setTimer(0);
     $('timer').textContent = 'Get ready';
-    recordingClick = createClickTrack(context, recordingTempo, countInStart, ($('record-click').checked || captureClick) ? 0 : 4, recordingMeter, 4);
+    recordingClick = createClickTrack(context, recordingTempo, countInStart, ($('record-click').checked || captureClick) ? (recordingReference ? 4 + recordingLimit * recordingTempo / 60 : 0) : 4, recordingMeter, 4);
     if (captureClick) recordingClick.connect(worklet, 0, 1);
+    const viewport = {left: window.scrollX, top: window.scrollY};
     $('playback').hidden = true;
+    preserveViewport(viewport);
     $('record-hint').textContent = 'Four beats in. Start playing on the next beat.';
     status(`Counting in at ${recordingTempo} BPM. Use headphones to keep the click out of the input.`);
   } catch (error) {
@@ -227,9 +242,9 @@ async function stopRecording() {
     setMode('idle'); status('That take was too short. Record a few notes, then stop again.', true); return;
   }
   await processAudio(encodeWav(samples, recordingRate), false, recordingTempo, recordingMeter,
-    mixedSamples ? encodeWav(mixedSamples, recordingRate) : null);
+    mixedSamples ? encodeWav(mixedSamples, recordingRate) : null, recordingReference);
 }
-async function processAudio(blob, demo, tempo = null, meter = {numerator: 4, denominator: 4}, mixedBlob = null) {
+async function processAudio(blob, demo, tempo = null, meter = {numerator: 4, denominator: 4}, mixedBlob = null, practice = null) {
   invalidateToleranceUpdate();
   setMode('processing');
   $('record-hint').textContent = 'Listening back to your melody…';
@@ -246,6 +261,7 @@ async function processAudio(blob, demo, tempo = null, meter = {numerator: 4, den
   $('playback').hidden = false;
   cancelAnimationFrame(playbackFrame); scoreDuration = 0; latestScore = null;
   const viewport = {left: window.scrollX, top: window.scrollY};
+  if (scoreView) scoreView.liveClock = null;
   scoreView?.clear();
   // Clear old notation so a failed request cannot pair a previous score with new audio.
   $('score-result').hidden = true; $('score-empty').hidden = false;
@@ -265,6 +281,7 @@ async function processAudio(blob, demo, tempo = null, meter = {numerator: 4, den
     const response = await fetch('/api/transcribe', {method: 'POST', body, signal: controller.signal});
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not analyze this recording. Please try again.');
+    if (practice) result.practice = practice;
     renderResult(result, demo);
     const usingInterface = !demo && /scarlett|focusrite/i.test($('mic-label').textContent);
     status(usingInterface && !result.notes.length
@@ -280,6 +297,7 @@ async function processAudio(blob, demo, tempo = null, meter = {numerator: 4, den
   } finally { clearTimeout(deadline); setMode('idle'); }
 }
 function renderResult(result, demo) {
+  window.CoachingUI?.setResult(result);
   latestScore = {result, demo};
   showTolerance();
   const bass = selectedClef === 'bass';
@@ -289,10 +307,11 @@ function renderResult(result, demo) {
   $('note-count').textContent = `${notes.length} NOTE${notes.length === 1 ? '' : 'S'} DETECTED`;
   $('score-subtitle').textContent = `${demo ? 'Demo melody' : 'Your latest take'} · ${result.duration.toFixed(1)} seconds${result.tempo ? ` · ${result.tempo} BPM · ${meter.numerator}/${meter.denominator}` : ''}`;
   $('score-footer-text').textContent = notes.length ? `${bass ? 'Bass' : 'Treble'} clef · notes shown at sounding pitch. Each bar = ${(meter.numerator * 60 / bpm).toFixed(3)} seconds at normal playback speed.` : 'Try a slower melody in a quieter room.';
-  $('score-result').hidden = !notes.length; $('score-empty').hidden = !!notes.length;
+  $('score-result').hidden = !notes.length && !result.practice; $('score-empty').hidden = !!notes.length || !!result.practice;
   $('rhythm-caption').textContent = result.tempo ? `Estimated note lengths · ${result.timing_tolerance || 0}% undotted-note tolerance` : 'Pitch sketch · record with a tempo for note values';
   $('note-list').replaceChildren();
-  if (!notes.length) return;
+  window.PracticeUI?.feedback(result);
+  if (!notes.length && !result.practice) return;
   scoreDuration = result.duration;
   try {
     if (!scoreView) scoreView = new AlphaScoreView($('staff'), $('audio-playback'), message => status(message, true));
@@ -318,17 +337,17 @@ function renderResult(result, demo) {
 }
 async function demoMelody() {
   if (mode !== 'idle') return;
-  let bpm, meter;
-  try { bpm = readTempo(); meter = readMeter(); } catch (error) { status(error.message, true); return; }
+  let bpm, meter, demoPractice;
+  try { bpm = readTempo(); demoPractice = window.PracticeUI?.selected(bpm); meter = demoPractice?.reference.time_signature || readMeter(); } catch (error) { status(error.message, true); return; }
   $('audio-playback').pause(); setMode('processing');
   await stopMetronomePreview();
   const rate = 22050, beat = 60 / bpm * meter.denominator / 4;
-  const melody = [[48, 1], [50, .5], [52, .5], [53, 2], [55, 1], [57, 1], [59, 4], [60, 1]];
-  const duration = melody.reduce((sum, note) => sum + note[1], 0) * beat + .2;
+  const melody = demoPractice ? demoPractice.reference.notes.map(note => [note.midi, note.duration_beats, note.start]) : [[48, 1], [50, .5], [52, .5], [53, 2], [55, 1], [57, 1], [59, 4], [60, 1]];
+  const duration = demoPractice ? demoPractice.reference.duration : melody.reduce((sum, note) => sum + note[1], 0) * beat + .2;
   const samples = new Float32Array(Math.ceil(rate * duration));
   let position = 0;
-  melody.forEach(([midi, beats]) => {
-    const frequency = 440 * 2 ** ((midi - 69) / 12), start = Math.round(position * rate);
+  melody.forEach(([midi, beats, onset]) => {
+    const frequency = 440 * 2 ** ((midi - 69) / 12), start = Math.round((onset ?? position) * rate);
     const length = beats * beat - Math.min(.015, beats * beat * .03);
     for (let i = 0; i < Math.floor(rate * length); i++) {
       const t = i / rate, envelope = Math.min(1, t / .005) * Math.exp(-.25 * t) * Math.min(1, (length - t) / .008);
@@ -336,7 +355,7 @@ async function demoMelody() {
     }
     position += beats * beat;
   });
-  setTimer(duration); await processAudio(encodeWav(samples, rate), true, bpm, meter);
+  setTimer(duration); await processAudio(encodeWav(samples, rate), true, bpm, meter, null, demoPractice);
 }
 async function listInputs(requestPermission = false) {
   if (mode !== 'idle') return;
@@ -415,15 +434,16 @@ function updateMetronomeControls() {
   $('metronome-play').textContent = metroStarting ? 'Connecting…' : previewContext ? '■ Stop metronome' : '▶ Play metronome';
   $('metronome-play').setAttribute('aria-pressed', String(!!previewContext));
   $('tempo').disabled = locked || !!previewContext;
-  $('meter-numerator').disabled = locked || !!previewContext;
-  $('meter-denominator').disabled = locked || !!previewContext;
+  $('meter-numerator').disabled = locked || !!previewContext || !!$('reference-piece').value;
+  $('meter-denominator').disabled = locked || !!previewContext || !!$('reference-piece').value;
   $('audio-output').disabled = locked || !!previewContext || !window.AudioContext?.prototype.setSinkId;
   $('record-click').disabled = locked;
   $('capture-click').disabled = locked;
   $('timing-tolerance').disabled = locked;
   $('demo-button').disabled = locked;
-  ['audio-device', 'audio-channel', 'refresh-inputs'].forEach(id => $(id).disabled = locked);
+  ['audio-device', 'audio-channel', 'refresh-inputs', 'bass-clef', 'treble-clef'].forEach(id => $(id).disabled = locked);
   $('record-button').disabled = !['idle', 'recording', 'countin'].includes(mode) || metroStarting;
+  window.PracticeUI?.lock(locked || !!previewContext);
 }
 function resetBeatDisplay() {
   document.querySelectorAll('.beat-dots i').forEach(dot => dot.classList.remove('active'));

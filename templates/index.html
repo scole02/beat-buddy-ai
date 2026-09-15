@@ -9,8 +9,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='vendor/alphatab/alphaTab.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='musicxml.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='practice.js') }}" defer></script>
   <script src="{{ url_for('static', filename='score-view.js') }}" defer></script>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='practice-ui.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='coaching-ui.js') }}" defer></script>
 </head>
 <body>
   <header class="site-header"><a class="brand" href="/" aria-label="Fret and Field home"><span class="brand-icon">ƒ</span>fret <i>&</i> field<span class="beta">EARLY ACCESS</span></a><span class="header-note"><span class="small-dot"></span>A little practice, every day.</span></header>
@@ -19,6 +22,13 @@
     <div class="workspace">
       <section class="recorder panel" aria-labelledby="record-title">
         <div class="section-heading"><span class="step">01</span><h2 id="record-title">Capture a melody</h2><span class="live-tag" id="state-tag">READY</span></div>
+        <div class="reference-settings">
+          <label for="reference-piece">Practice piece</label><select id="reference-piece" disabled><option value="">Free recording · no reference</option></select>
+          <button id="upload-reference" type="button">Upload MusicXML</button><input id="reference-file" type="file" accept=".musicxml,.xml" hidden><span id="upload-status" role="status"></span>
+          <label for="reference-octave">Reference octave</label><select id="reference-octave"><option value="0">As written</option><option value="-1">One octave lower</option><option value="-2">Two octaves lower</option></select>
+          <label for="practice-timing">Attack timing allowance (ms)</label><input id="practice-timing" type="number" min="20" max="300" value="100" step="10">
+          <p id="reference-hint">Loading the seven reference scales…</p>
+        </div>
         <div class="audio-settings">
           <div><label for="audio-device">Audio input</label><select id="audio-device"><option value="">System default</option></select><label class="output-label" for="audio-output">Headphone output</label><select id="audio-output"><option value="">System default output</option></select></div>
           <div><label for="audio-channel">Record channel</label><select id="audio-channel"><option value="0">Input 1 / mono · Solo guitar</option><option value="1">Input 2 · Solo microphone</option></select></div>
@@ -64,6 +74,16 @@
         <div class="section-heading"><span class="step">02</span><h2 id="score-title">Your melody, written down</h2><span class="score-tag" id="note-count">NO NOTES YET</span></div>
         <div class="score-meta"><span id="score-subtitle">A fresh page for your next idea.</span><div class="clef-toggle" role="group" aria-label="Staff clef"><button id="bass-clef" type="button" aria-pressed="true">Bass clef</button><button id="treble-clef" type="button" aria-pressed="false">Treble clef</button></div></div>
         <div id="score-empty" class="score-empty"><div class="empty-staff" aria-hidden="true"><span id="empty-clef">𝄢</span><i></i><i></i><i></i><i></i><i></i></div><div class="empty-caption"><span class="little-note">♪</span><h3>A little silence before the music.</h3><p>Record a melody above. The notes you play will appear here.</p></div></div>
+        <div id="practice-feedback" class="practice-feedback" hidden aria-live="polite"></div>
+        <section id="coaching-panel" class="coaching-panel" hidden aria-label="AI coaching">
+          {% if coaching_protected %}
+          <label for="coaching-access-code">Coaching access code</label>
+          <input id="coaching-access-code" type="password" autocomplete="off" maxlength="256" placeholder="Provided by your teacher">
+          {% endif %}
+          <button id="get-coaching" type="button">Get AI coaching</button>
+          <p>On request, your two scores and measured practice results are sent to the configured AI provider. Audio is not sent.</p>
+          <p id="coaching-status" role="status"></p><div id="coaching-advice"></div>
+        </section>
         <div id="score-result" hidden><div class="score-scroll" tabindex="0" aria-label="Musical score, three measures per row"><div id="staff" aria-label="Transcribed guitar notes"></div></div><div class="score-download"><a id="download-musicxml" download="my-melody.musicxml" hidden>Download MusicXML</a></div><div id="note-list" class="note-list" aria-label="Detected notes"></div></div>
         <div class="score-footer"><span><span class="small-dot"></span><span id="score-footer-text">Listening comes first. The notation follows.</span></span><span id="rhythm-caption">Note values estimated from the recording tempo</span></div>
       </section>

@@ -2,7 +2,7 @@
 const {readFileSync} = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
-async function check(channel, availableChannels, reject = false, captureClick = false) {
+async function check(channel, availableChannels, reject = false, captureClick = false, practice = false) {
   const nodes = new Map(), connections = [], requests = [], worklets = [];
   let stopped = false;
   function element(id) {
@@ -21,7 +21,7 @@ async function check(channel, availableChannels, reject = false, captureClick = 
   const sandbox = {
     document:{getElementById:element,querySelectorAll:()=>[],body:{classList:{toggle(){}}}},
     navigator:{mediaDevices:{getUserMedia:async options=>{requests.push(options);if(reject)throw Object.assign(new Error('missing'),{name:'OverconstrainedError'});return audioStream;},enumerateDevices:async()=>[],addEventListener(){}}},
-    window:{AudioContext,AudioWorkletNode:true,devicePixelRatio:1,addEventListener(){}},
+    window:{PracticeUI:practice ? {selected:()=>({reference:{duration:4.8,time_signature:{numerator:4,denominator:4}}}),preview(){},lock(){}} : undefined,AudioContext,AudioWorkletNode:true,devicePixelRatio:1,addEventListener(){}},
     AudioContext, AudioWorkletNode:class {constructor(_ctx,name,options){this.name=name;this.options=options;this.port={postMessage(){}};worklets.push(this);}connect(){connections.push(this.name+'-output');}disconnect(){}},
     Float32Array, Option:class{}, performance:{now:()=>0},requestAnimationFrame(){},cancelAnimationFrame(){},setTimeout(){},clearTimeout(){},console
   };
@@ -42,11 +42,12 @@ async function check(channel, availableChannels, reject = false, captureClick = 
     assert.deepEqual(connections,['source-to-splitter',channel,channel,'pcm-recorder-output','metronome-output', ...(captureClick ? ['metronome-output'] : [])]);
     const recorder=worklets.find(w=>w.name==='pcm-recorder');
     assert.equal(recorder.options.processorOptions.startTime,12.55);
+    assert.equal(recorder.options.processorOptions.maxDuration,practice ? 4.8 : 60);
     assert.equal(recorder.options.numberOfInputs, captureClick ? 2 : 1);
     assert.equal(recorder.options.processorOptions.includeClick, captureClick);
     if (captureClick) {
       const click = worklets.find(w=>w.name==='metronome');
-      assert.equal(click.options.processorOptions.beatLimit, 0);
+      assert.equal(click.options.processorOptions.beatLimit, practice ? 12 : 0);
       recorder.port.onmessage({data:{type:'mix',samples:new Float32Array([.1])}});
       assert.equal(vm.runInContext('mixedChunks.length',sandbox),1);
     }
@@ -64,5 +65,6 @@ async function check(channel, availableChannels, reject = false, captureClick = 
   await check(1,1); // Missing second channel must not yield a silent take.
   await check(0,2,true); // Disconnected USB source must not fall back to microphone.
   await check(0,2,false,true); // Embedded click forces continuous metronome and separate capture input.
-  console.log('6 audio routing cases passed');
+  await check(0,2,false,true,true); // Reference capture stops after 8 beats, click after 4 + 8.
+  console.log('7 audio routing cases passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

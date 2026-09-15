@@ -1,7 +1,12 @@
 """Local guitar transcription app. Audio is processed in memory, never saved."""
 import io
+import os
+import hmac
 import math
 import wave
+import threading
+from pathlib import Path
+from dotenv import load_dotenv
 
 import numpy as np
 from flask import Flask, jsonify, render_template, request
@@ -9,6 +14,11 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 from transcription import transcribe
 from rhythm import assign_note_values
+from reference_import import import_reference
+from coaching import OpenAICoach, CoachingError, prepare_request
+
+load_dotenv(Path(__file__).parent / ".env")
+coach_slots = threading.BoundedSemaphore(2)
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 13 * 1024 * 1024
@@ -16,7 +26,16 @@ app.config['MAX_CONTENT_LENGTH'] = 13 * 1024 * 1024
 
 @app.get('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', coaching_protected=coaching_requires_code())
+
+
+def coaching_requires_code():
+    return os.getenv('APP_PUBLIC', '').lower() == 'true' or bool(os.getenv('COACH_ACCESS_CODE'))
+
+
+@app.get('/healthz')
+def health():
+    return jsonify(status='ok')
 
 
 @app.post('/api/transcribe')
@@ -83,6 +102,44 @@ def update_rhythm():
         return jsonify(result)
     except (ValueError, TypeError, KeyError, OverflowError):
         return jsonify(error='Invalid note timings, time signature, or tolerance (0–25%).'), 400
+
+@app.post('/api/references/import')
+def upload_reference():
+    upload = request.files.get('file')
+    if upload is None:
+        return jsonify(error='Choose a MusicXML file.'), 400
+    if not (upload.filename or '').lower().endswith(('.musicxml', '.xml')):
+        return jsonify(error='Use uncompressed .musicxml or .xml; .mxl is not supported yet.'), 400
+    try:
+        return jsonify(import_reference(upload.read(1024 * 1024 + 1)))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post('/api/coaching')
+def get_coaching():
+    if coaching_requires_code():
+        code = os.getenv('COACH_ACCESS_CODE', '')
+        if not code:
+            return jsonify(error='AI coaching is not configured for this public demo yet.'), 503
+        supplied = request.headers.get('X-Coaching-Code', '')
+        if not hmac.compare_digest(supplied.encode(), code.encode()):
+            return jsonify(error='Enter the coaching access code provided by your teacher.'), 401
+    if request.content_length and request.content_length > 450000:
+        return jsonify(error='This coaching request is too large.'), 413
+    try:
+        payload = prepare_request(request.get_json(silent=True))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    if not coach_slots.acquire(blocking=False):
+        return jsonify(error='Coaching is busy. Please try again shortly.'), 429
+    try:
+        return jsonify(OpenAICoach().generate(payload))
+    except CoachingError as exc:
+        return jsonify(error=str(exc)), 503
+    finally:
+        coach_slots.release()
+
 
 @app.errorhandler(RequestEntityTooLarge)
 def too_large(_error):

@@ -13,10 +13,12 @@
     const barTicks = meter.numerator * 16 / meter.denominator;
     // A monophonic voice cannot contain simultaneous attacks. Keep the strongest
     // detection if multiple attacks quantize to the same sixteenth-note position.
+    const limit = result.scoreDuration == null ? Infinity : Math.round(result.scoreDuration / tickSeconds);
     const byStart = new Map();
     for (const note of result.notes) {
       const start = Math.max(0, Math.round((note.notation_start ?? note.start) / tickSeconds));
-      const duration = Math.max(1, Math.round((note.duration_beats ?? note.duration / (tickSeconds * 4)) * 4));
+      if (start >= limit) continue;
+      const duration = Math.min(limit - start, Math.max(1, Math.round((note.duration_beats ?? note.duration / (tickSeconds * 4)) * 4)));
       const previous = byStart.get(start);
       if (!previous || (note.confidence || 0) > (previous.note.confidence || 0)) byStart.set(start, {start, duration, note});
     }
@@ -33,9 +35,9 @@
         const rest = midi === undefined;
         const tieStop = !rest && offset > 0, tieStart = !rest && remaining > ticks;
         const pitch = rest ? '<rest/>' : (() => {
-          const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+          const names = result.key_fifths < 0 ? ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'] : ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
           const name = names[midi % 12];
-          return `<pitch><step>${name[0]}</step>${name.length > 1 ? '<alter>1</alter>' : ''}<octave>${Math.floor(midi / 12)-1}</octave></pitch>`;
+          return `<pitch><step>${name[0]}</step>${name.length > 1 ? `<alter>${name[1] === 'b' ? -1 : 1}</alter>` : ''}<octave>${Math.floor(midi / 12)-1}</octave></pitch>`;
         })();
         bars[Math.floor((start + offset) / barTicks)].push(`<note>${pitch}<duration>${ticks}</duration>${tieStop ? '<tie type="stop"/>' : ''}${tieStart ? '<tie type="start"/>' : ''}<voice>1</voice><type>${type}</type>${dotted ? '<dot/>' : ''}${tieStart || tieStop ? `<notations>${tieStop ? '<tied type="stop"/>' : ''}${tieStart ? '<tied type="start"/>' : ''}</notations>` : ''}</note>`);
         offset += ticks; remaining -= ticks;
@@ -49,7 +51,7 @@
     }
     if (cursor < barCount * barTicks) writeSpan(cursor, barCount * barTicks - cursor);
     const xml = `<?xml version="1.0" encoding="utf-8"?>
-<score-partwise version="4.0"><work><work-title>Your melody</work-title></work><part-list><score-part id="P1"><part-name>Instrument</part-name><score-instrument id="I1"><instrument-name>Instrument</instrument-name></score-instrument><midi-instrument id="I1"><midi-channel>1</midi-channel><midi-program>1</midi-program></midi-instrument></score-part></part-list><part id="P1">${bars.map((notes, i) => `<measure number="${i+1}">${i && i % 3 === 0 ? '<print new-system="yes"/>' : ''}${i === 0 ? `<attributes><divisions>4</divisions><key><fifths>0</fifths></key><time><beats>${meter.numerator}</beats><beat-type>${meter.denominator}</beat-type></time><clef><sign>${clef === 'bass' ? 'F' : 'G'}</sign><line>${clef === 'bass' ? 4 : 2}</line></clef></attributes><direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${quarterBpm}</per-minute></metronome></direction-type><sound tempo="${quarterBpm}"/></direction>` : ''}${notes.join('')}</measure>`).join('')}</part></score-partwise>`;
+<score-partwise version="4.0"><work><work-title>Your melody</work-title></work><part-list><score-part id="P1"><part-name>Instrument</part-name><score-instrument id="I1"><instrument-name>Instrument</instrument-name></score-instrument><midi-instrument id="I1"><midi-channel>1</midi-channel><midi-program>1</midi-program></midi-instrument></score-part></part-list><part id="P1">${bars.map((notes, i) => `<measure number="${i+1}">${i && i % 3 === 0 ? '<print new-system="yes"/>' : ''}${i === 0 ? `<attributes><divisions>4</divisions><key><fifths>${result.key_fifths || 0}</fifths></key><time><beats>${meter.numerator}</beats><beat-type>${meter.denominator}</beat-type></time><clef><sign>${clef === 'bass' ? 'F' : 'G'}</sign><line>${clef === 'bass' ? 4 : 2}</line></clef></attributes><direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${quarterBpm}</per-minute></metronome></direction-type><sound tempo="${quarterBpm}"/></direction>` : ''}${notes.join('')}</measure>`).join('')}</part></score-partwise>`;
     return {xml, barCount, barSeconds: meter.numerator * 60 / bpm};
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = {exportMusicXml};

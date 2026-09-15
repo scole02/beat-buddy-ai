@@ -51,3 +51,49 @@ const sync=view.api.score.exportFlatSyncPoints();
 assert.ok(Math.abs(sync.at(-1).millisecondOffset-7200)<1e-8,'do not squeeze the padded 7.2s score into 6.8s audio');
 view.clear();assert.equal(downloads.hidden,true);
 console.log('Score/media bridge passed: clock units, rate changes, no seek feedback, buffering, rerender preservation, and partial final bars.');
+// Exercise the real alphaTab model construction for stacked reference/recording.
+scope.Practice = require('../static/practice.js');
+const reference=scope.Practice.referenceAt(JSON.parse(fs.readFileSync('static/references/catalog.json'))[0],100,-2);
+const played={tempo:100,time_signature:reference.time_signature,duration:reference.duration,
+  practice:{reference,allowanceMs:100},notes:reference.notes.map((n,i)=>({...n,midi:n.midi+(i===2?1:0)}))};
+view.render(played,'bass');
+assert.equal(view.api.score.tracks.length,2);
+assert.equal(view.api.score.masterBars.length,2);
+assert.equal(view.api.score.tracks[0].name,'Reference');
+assert.equal(view.api.score.tracks[1].name,'You played');
+for (const track of view.api.score.tracks) {
+  assert.equal(track.staves[0].bars.length,2);
+  const notes=track.staves[0].bars[0].voices[0].beats.flatMap(b=>b.notes);
+  assert.ok(notes[0].style.colors.size>0);
+  assert.notEqual(notes[0].style.colors.get(at.model.NoteSubElement.StandardNotationNoteHead).rgba,
+    notes[2].style.colors.get(at.model.NoteSubElement.StandardNotationNoteHead).rgba);
+}
+view.render({...played,notes:[]},'treble');
+assert.equal(view.api.score.tracks.length,2);
+assert.ok(view.api.score.tracks[1].staves[0].bars.every(b=>b.voices[0].beats.every(n=>n.isRest)));
+audio.paused=true;audio.currentTime=0;
+view.liveClock=()=>({currentTime:2.4,duration:4.8,playbackRate:1,paused:false,ended:false,seeking:false,readyState:4});
+view.sync();assert.equal(positions.at(-1),2400);assert.equal(audio.paused,true,'live practice must not start the old recording');
+console.log('Stacked score and live capture clock passed: two aligned tracks, colored notes, silent take and no old-audio playback.');
+// The cursor is independent of either track's attacks, gaps and tied durations.
+let drawn, transition;
+view.cursors = {beatCursor:{transitionToX:(ms,x)=>{transition={ms,x};},setBounds:(x,y,w,h)=>{drawn={x,y,w,h};}},barCursor:{setBounds(){}}};
+view.api.renderer={boundsLookup:{findMasterBarByIndex:index=>({lineAlignedBounds:{x:100+index%3*250,y:Math.floor(index/3)*200,w:250,h:150}})}};
+view.barCount=6;view.barSeconds=2.4;
+for (const time of [0,.6,1.2,2.399,2.4,2.401,4.8,7.2,8.4,14.4]) {
+  const media={currentTime:time,paused:true};
+  view.placeTimeCursor(media);
+  const live={...drawn};
+  view.liveClock=()=>media;
+  view.sync();
+  assert.deepEqual(drawn,live,'capture and replay must use identical geometry at the same time');
+  assert.equal(transition.ms,0,'no competing CSS animation');
+}
+view.placeTimeCursor({currentTime:2.4-.00001,paused:true});const before=drawn.x;
+view.placeTimeCursor({currentTime:2.4+.00001,paused:true});assert.ok(Math.abs(drawn.x-before)<.01);
+for (let measure=0;measure<6;measure++)for(const fraction of [0,.25,.5,.75]) {
+  view.placeTimeCursor({currentTime:(measure+fraction)*2.4,paused:true});
+  assert.ok(Math.abs(drawn.x-(100+(measure%3+fraction)*250))<1e-8);
+}
+assert.equal(view.api.options.player.enableAnimatedBeatCursor,false);
+console.log('Uniform cursor passed: equal time increments, identical live/replay positions, barline continuity, row wraps and no CSS animation.');

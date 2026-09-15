@@ -181,8 +181,10 @@ its absolute time (`measure index × beats per measure × 60 / BPM`). It uses
 alphaTab's external-media mode with the existing recording player. Pauses, seeks,
 buffering and playback-rate changes update the engine; there is no independent
 score animation timer. A partial final measure is not stretched to fill the audio.
-Music engraving uses rhythmic spacing, so cursor pixel speed may vary between
-notes, while the score's musical time remains tied to the recording.
+The cursor uses a shared elapsed-time mapping for recording and replay. It moves
+linearly between rendered measure boundaries instead of following note-dependent
+animations on either staff. Measure widths use equal layout weights; alphaTab
+retains fixed space for clefs and signatures. Pauses and seeks follow media time.
 
 Use **Download MusicXML** below the score to open the same notation in another
 notation editor. MIDI is not used as an intermediate format; MusicXML carries the
@@ -194,3 +196,124 @@ Checks: `node tests/score-layout.cjs` round-trips XML through the actual alphaTa
 importer across 120 tempo/meter combinations; `node tests/score-playback.cjs`
 checks the media bridge, rate changes, seek feedback, and rerenders. Existing
 `audio-clock.cjs`, `audio-routing.cjs`, `playback-clock.cjs` and Python tests still apply.
+
+## Reference scale practice
+
+Choose one of the seven **Practice piece** scales (C, D, E, F, G, A, B major),
+select the written octave or one/two octaves below, and set a practice tempo.
+The meter comes from the piece. All supplied files contain eight quarter notes in
+a single nominal 4/4 measure; the catalog preserves their pitches and durations,
+and the MusicXML exporter normalizes them into two complete measures. Originals
+are preserved in `static/references/`; `catalog.json` contains their parsed events
+and key signatures. The built-in catalog remains fixed; external MusicXML can be added with the upload button for the current session.
+
+Record gives four count-in beats, then drives the reference cursor from the
+capture AudioContext clock. The recorder worklet captures exactly the piece's
+sample duration and stops automatically at its final barline. The optional
+embedded click is limited to the piece too. Cancelling the count-in and stopping
+early remain supported. Free recording still has its original 60-second limit.
+
+After analysis, alphaTab renders a single system with **Reference** above **You
+played**, sharing barlines and musical time. Missing input appears as rests. The
+MusicXML download includes both parts (feedback colors are app annotations).
+**Try a demo melody** uses the selected scale when one is selected.
+
+Attack timing allowance is 20–300 ms, default ±100 ms, saved with each take.
+`practice.js` aligns the ordered expected and detected events with insertion and
+deletion handling, then compares absolute MIDI pitch (including octave) and raw
+attack times, before notation quantization. Green means pitch and attack match,
+red means wrong/missed, amber means an early/late attack, and purple means extra.
+A written report identifies each issue and timing offset. Sounding duration,
+articulation and fingering are not graded. Hardware/input-detection latency is
+not automatically compensated; a shared timing shift can reflect latency.
+
+Tests: `node tests/practice.cjs` covers the catalog and comparison; the existing
+score/media tests include stacked tracks and live capture clocks, and audio routing
+tests verify the reference capture duration and count-in/click limits.
+
+
+## AI coaching setup
+
+Copy `.env.example` to `.env` and set **OPENAI_API_KEY** and **OPENAI_MODEL** to
+credentials and a model available in your API account. Restart with
+`uv run python app.py`. The server loads `.env` through python-dotenv; existing
+process environment variables take precedence. `.env` is git-ignored. Do not
+put credentials in templates or JavaScript.
+
+After a reference take (including a practice demo), click **Get AI coaching**.
+Nothing is sent to the provider until this button is pressed. The request contains
+the generated reference and recorded MusicXML, raw detected pitches/attack times,
+the comparison report, meter, and tolerance settings. It contains no audio. Advice
+appears as plain text and is discarded when the take or score changes. Requests
+have a 60-second provider timeout and no automatic retries; failed requests can be
+retried explicitly. Aborting the browser request prevents stale advice from being
+shown but may not cancel an already running provider request or its charge.
+
+**Edit `prompts/coaching_system.txt` to change the coaching style.** It is read on
+each request, so prompt edits do not require a server restart. It asks for strengths,
+evidence-based problem areas, a short practice plan, and an appropriate next
+challenge; external-piece suggestions are labeled as requiring uploads. It treats
+XML metadata as data, distinguishes raw timing from quantized notation, and avoids
+claims about unobserved fingering or long-term progress.
+
+`coaching.py` contains the provider adapter, separate from the route and prompt.
+OpenAI uses the [Responses API](https://developers.openai.com/api/reference/python/resources/responses/methods/create)
+with `store=False`. Change **OPENAI_MODEL** to switch models. For another compatible
+provider, set **OPENAI_BASE_URL**, replace the API key/model, and optionally set
+**COACH_API_MODE=chat_completions** for a Chat Completions endpoint. Providers with
+other protocols need a new adapter implementing `generate(payload)`. Credentials
+and endpoint changes require a server restart. Provider access, pricing and feature
+compatibility depend on the chosen account/model.
+
+Public deployments require a shared coaching access code (see below). This gates
+provider requests but is not a per-user quota: anyone with the code can request
+coaching. Rotate it in server settings if needed. The code is held in the password
+field for the current page only; it is not saved to browser storage.
+
+## Deploy from GitHub to Render
+
+The Flask backend needs a Python web service; GitHub Pages cannot run it.
+The included `render.yaml` creates one **free** Render web service, installs locked
+dependencies using `uv sync --locked --no-dev`, and runs Gunicorn with a health
+check at `/healthz`. No database or persistent disk is required.
+
+1. Push the code to `scole02/beat-buddy-ai` on GitHub.
+2. Sign in to Render, choose **New → Blueprint**, and connect that repository.
+3. Set **COACH_ACCESS_CODE** to a long random code to share with your students,
+   **OPENAI_API_KEY** to your provider key, and **OPENAI_MODEL** to your chosen model.
+   Enter these as secret environment variables in Render, never in GitHub.
+4. Deploy and open the service's HTTPS URL. Use HTTPS for microphone access.
+   Add this URL to the GitHub repository's About/Website field or your profile.
+
+`APP_PUBLIC=true` makes coaching fail closed if the access code is missing, even
+when an API key is configured. Recording, uploads and comparisons remain public.
+Without provider credentials the app still works, but coaching returns a setup
+error. For other providers, use the configuration options described above.
+
+Render's free service sleeps after 15 idle minutes and can take about a minute to
+wake. It has limited CPU/memory, so transcription may take longer than locally.
+Uploads and recordings are processed in memory and are not retained by the server.
+See [Render's free plan limits](https://render.com/docs/free).
+
+To run the production server locally: `uv run gunicorn app:app` (port 8000, or
+set `PORT`). `uv run python app.py` still starts the local development server.
+
+## Uploading reference pieces
+
+Use **Upload MusicXML** next to the reference selector. Supports uncompressed
+`.musicxml`/`.xml` under 1 MB, one melody part/staff/voice, a fixed meter/key,
+sixteenth-grid note values, rests and ties. Written tempo markings are overridden
+by the selected practice tempo. The piece must fit within 60 seconds at that tempo;
+choose a shorter excerpt or a faster tempo if needed.
+
+Multiple parts/voices, chords, tuplets, pickups, repeats, microtones and transposing
+parts are rejected with an explanation instead of being silently flattened. Export
+a single melody in concert pitch, expand repeats, and pad pickups with leading
+rests before importing. Compressed `.mxl` is not supported yet. Uploads are parsed
+in memory using defusedxml and are available only in the current page session;
+re-upload after refreshing. They are not added permanently to the built-in catalog.
+
+Tests: `uv run python -m unittest discover -s tests` includes mocked provider calls,
+configuration/error handling and upload validation. `node tests/coaching-ui.cjs`
+checks on-demand requests, plain-text output, duplicate clicks and stale responses.
+No live provider calls are made by the tests.

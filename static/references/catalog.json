@@ -1,0 +1,359 @@
+[
+  {
+    "id": "c",
+    "title": "C Major \u00b7 Ionian",
+    "file": "c-major-ionian.musicxml",
+    "numerator": 4,
+    "denominator": 4,
+    "quarters": 8.0,
+    "notes": [
+      {
+        "midi": 60,
+        "quarterStart": 0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 62,
+        "quarterStart": 1.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 64,
+        "quarterStart": 2.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 65,
+        "quarterStart": 3.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 67,
+        "quarterStart": 4.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 69,
+        "quarterStart": 5.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 71,
+        "quarterStart": 6.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 72,
+        "quarterStart": 7.0,
+        "quarterDuration": 1.0
+      }
+    ],
+    "key_fifths": 0
+  },
+  {
+    "id": "d",
+    "title": "D Major \u00b7 Ionian",
+    "file": "d-major-ionian.musicxml",
+    "numerator": 4,
+    "denominator": 4,
+    "quarters": 8.0,
+    "notes": [
+      {
+        "midi": 62,
+        "quarterStart": 0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 64,
+        "quarterStart": 1.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 66,
+        "quarterStart": 2.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 67,
+        "quarterStart": 3.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 69,
+        "quarterStart": 4.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 71,
+        "quarterStart": 5.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 73,
+        "quarterStart": 6.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 74,
+        "quarterStart": 7.0,
+        "quarterDuration": 1.0
+      }
+    ],
+    "key_fifths": 0
+  },
+  {
+    "id": "e",
+    "title": "E Major \u00b7 Ionian",
+    "file": "e-major-ionian.musicxml",
+    "numerator": 4,
+    "denominator": 4,
+    "quarters": 8.0,
+    "notes": [
+      {
+        "midi": 64,
+        "quarterStart": 0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 66,
+        "quarterStart": 1.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 68,
+        "quarterStart": 2.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 69,
+        "quarterStart": 3.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 71,
+        "quarterStart": 4.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 73,
+        "quarterStart": 5.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 75,
+        "quarterStart": 6.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 76,
+        "quarterStart": 7.0,
+        "quarterDuration": 1.0
+      }
+    ],
+    "key_fifths": 0
+  },
+  {
+    "id": "f",
+    "title": "F Major \u00b7 Ionian",
+    "file": "f-major-ionian.musicxml",
+    "numerator": 4,
+    "denominator": 4,
+    "quarters": 8.0,
+    "notes": [
+      {
+        "midi": 65,
+        "quarterStart": 0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 67,
+        "quarterStart": 1.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 69,
+        "quarterStart": 2.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 70,
+        "quarterStart": 3.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 72,
+        "quarterStart": 4.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 74,
+        "quarterStart": 5.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 76,
+        "quarterStart": 6.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 77,
+        "quarterStart": 7.0,
+        "quarterDuration": 1.0
+      }
+    ],
+    "key_fifths": 0
+  },
+  {
+    "id": "g",
+    "title": "G Major \u00b7 Ionian",
+    "file": "g-major-ionian.musicxml",
+    "numerator": 4,
+    "denominator": 4,
+    "quarters": 8.0,
+    "notes": [
+      {
+        "midi": 67,
+        "quarterStart": 0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 69,
+        "quarterStart": 1.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 71,
+        "quarterStart": 2.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 72,
+        "quarterStart": 3.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 74,
+        "quarterStart": 4.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 76,
+        "quarterStart": 5.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 78,
+        "quarterStart": 6.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 79,
+        "quarterStart": 7.0,
+        "quarterDuration": 1.0
+      }
+    ],
+    "key_fifths": 0
+  },
+  {
+    "id": "a",
+    "title": "A Major \u00b7 Ionian",
+    "file": "a-major-ionian.musicxml",
+    "numerator": 4,
+    "denominator": 4,
+    "quarters": 8.0,
+    "notes": [
+      {
+        "midi": 69,
+        "quarterStart": 0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 71,
+        "quarterStart": 1.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 73,
+        "quarterStart": 2.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 74,
+        "quarterStart": 3.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 76,
+        "quarterStart": 4.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 78,
+        "quarterStart": 5.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 80,
+        "quarterStart": 6.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 81,
+        "quarterStart": 7.0,
+        "quarterDuration": 1.0
+      }
+    ],
+    "key_fifths": 0
+  },
+  {
+    "id": "b",
+    "title": "B Major \u00b7 Ionian",
+    "file": "b-major-ionian.musicxml",
+    "numerator": 4,
+    "denominator": 4,
+    "quarters": 8.0,
+    "notes": [
+      {
+        "midi": 71,
+        "quarterStart": 0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 73,
+        "quarterStart": 1.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 75,
+        "quarterStart": 2.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 76,
+        "quarterStart": 3.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 78,
+        "quarterStart": 4.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 80,
+        "quarterStart": 5.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 82,
+        "quarterStart": 6.0,
+        "quarterDuration": 1.0
+      },
+      {
+        "midi": 83,
+        "quarterStart": 7.0,
+        "quarterDuration": 1.0
+      }
+    ],
+    "key_fifths": 0
+  }
+]

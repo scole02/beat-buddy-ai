@@ -21,3 +21,16 @@
 .at-highlight * { fill:#bd6c42; stroke:#bd6c42; }
 .score-download { padding:0 25px 18px; font-size:12px; }
 .score-download a { color:var(--green); text-underline-offset:3px; }
+.reference-settings { display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:18px 24px;border-bottom:1px solid var(--line);font-size:12px; }
+.reference-settings label { color:var(--green); }
+.reference-settings select,.reference-settings input { padding:7px;border:1px solid var(--line);border-radius:4px;background:#fffefa;font:12px var(--sans);color:var(--ink); }
+.reference-settings select option { font-family:var(--sans); }
+.reference-settings input { width:75px; }
+.reference-settings p { flex-basis:100%;font-size:11px;line-height:1.6;margin:0; }
+.practice-feedback { padding:12px 24px;font-size:12px;line-height:1.6;background:#f4f6ee; }
+.practice-feedback ul { display:flex;flex-wrap:wrap;gap:8px 26px;padding-left:18px; }
+.coaching-panel {padding:18px 24px;border-top:1px solid var(--line);background:#f6f7f1;font-size:12px;line-height:1.6;}
+.coaching-panel button,#upload-reference {border:1px solid var(--green);border-radius:5px;background:#fffefa;color:var(--green);padding:9px 13px;}
+.coaching-panel button:disabled {opacity:.5;}
+#coaching-advice {white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.8;}
+#upload-status {font-size:11px;flex-basis:100%;}
