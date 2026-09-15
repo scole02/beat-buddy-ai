@@ -1,4 +1,4 @@
-# Fret & Field
+# Beat Buddy AI
 
 [Open the live practice room](https://beat-buddy-ai.onrender.com/) · Hosted on Render's free plan; the first visit after inactivity may take about a minute to load. AI coaching requires the shared access code.
 

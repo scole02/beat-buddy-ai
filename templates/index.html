@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6f5f0">
-  <meta name="description" content="Record a guitar melody and see the notes you played on a musical staff.">
-  <title>Fret & Field — Your practice, on paper</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <meta name="description" content="Beat Buddy AI helps you practice guitar with recorded notes, reference scores, and personal AI coaching.">
+  <title>Beat Buddy AI — Your music practice companion</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg', v='beat-buddy') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='vendor/alphatab/alphaTab.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='musicxml.js') }}" defer></script>
@@ -16,7 +16,7 @@
   <script src="{{ url_for('static', filename='coaching-ui.js') }}" defer></script>
 </head>
 <body>
-  <header class="site-header"><a class="brand" href="/" aria-label="Fret and Field home"><span class="brand-icon">ƒ</span>fret <i>&</i> field<span class="beta">EARLY ACCESS</span></a><span class="header-note"><span class="small-dot"></span>A little practice, every day.</span></header>
+  <header class="site-header"><a class="brand" href="/" aria-label="Beat Buddy AI home"><img class="brand-icon" src="{{ url_for('static', filename='favicon.svg', v='beat-buddy') }}" alt="" width="40" height="40"><span class="brand-name">Beat Buddy <span class="brand-ai">AI</span></span><span class="beta">EARLY ACCESS</span></a><span class="header-note"><span class="small-dot"></span>A little practice, every day.</span></header>
   <main>
     <section class="intro"><div class="eyebrow">THE PRACTICE ROOM <span> / </span> 01</div><h1>Hear it. Play it. <em>See it.</em></h1><p>Turn a few notes on your guitar into something you can read.</p></section>
     <div class="workspace">
